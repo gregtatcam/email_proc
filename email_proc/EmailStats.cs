@@ -111,16 +111,10 @@ namespace email_proc
         {
             await WriteStatsLine(filew, "part: {0}", part);
             int csize = await CompressedSize(email.headers.GetBytes());
-            await WriteStatsLine(filew, "headers: {0} {1} {2}", email.headers.lines, email.headers.size, csize);
-            await filew.WriteLineAsync("H---------------------------");
-            await filew.WriteAsync(email.headers.GetString());
-            await filew.WriteLineAsync("----------------------------");
+            await WriteStatsLine(filew, "headers: {0} {1} {2}", email.headers.GetNumberOfHeaders(), email.headers.size, csize);
             switch (email.content.dataType)
             {
                 case DataType.Data:
-                    await filew.WriteLineAsync("C---------------------------");
-                    await filew.WriteAsync(email.content.GetString());
-                    await filew.WriteLineAsync("----------------------------");
                     if (email.headers.contentType == ContentType.Audio || email.headers.contentType == ContentType.Video ||
                         email.headers.contentType == ContentType.Image || email.headers.contentType == ContentType.Application)
                     {
