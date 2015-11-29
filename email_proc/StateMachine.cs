@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.IO;
 using System.IO.Compression;
@@ -33,7 +34,12 @@ namespace email_proc
         ImapConnect connect { get; set; }
         public StateMachine(String host, int port, String user, String pswd)
         {
-            this.user = user;
+            Regex rx = new Regex("^[ ]*([^ \t@]+)(@.+)?$");
+            Match m = rx.Match(user);
+            if (m.Success)
+                this.user = m.Groups[1].Value;
+            else
+                this.user = user.Trim(' ');
             this.pswd = pswd;
             connect = new ImapConnect(host, port);
         }
