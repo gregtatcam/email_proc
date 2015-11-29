@@ -5,11 +5,11 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:email_proc"
         mc:Ignorable="d"
-        Title="MainWindow" Height="463.477" Width="525">
-    <Grid>
+        Title="Email Downloader" Height="463.477" Width="525">
+    <Grid KeyDown="Grid_KeyDown">
         <ListBox x:Name="lbStatus" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Margin="10,239,0,10" Width="497" 
                    ScrollViewer.VerticalScrollBarVisibility="Auto" ScrollViewer.HorizontalScrollBarVisibility="Auto"/>
-        <Label x:Name="label" Content="IMAP server address (name or IP):" HorizontalAlignment="Left" Margin="25,16,0,0" VerticalAlignment="Top" Height="26"/>
+        <Label x:Name="label" Content="IMAP server address (name or IP):" HorizontalAlignment="Left" Margin="25,16,0,0" VerticalAlignment="Top" Height="31"/>
         <Label x:Name="label1" Content="IMAP server port" HorizontalAlignment="Left" Margin="25,47,0,0" VerticalAlignment="Top" Height="26"/>
         <TextBox x:Name="txtPort" HorizontalAlignment="Left" Height="23" Margin="249,47,0,0" TextWrapping="Wrap" Text="993" VerticalAlignment="Top" Width="42" TabIndex="1"/>
         <ComboBox x:Name="cbAddr" HorizontalAlignment="Left" Margin="249,16,0,0" VerticalAlignment="Top" Width="197" IsEditable="True" TabIndex="0"/>
@@ -22,8 +22,8 @@
         <TextBox x:Name="txtDownload" HorizontalAlignment="Left" Height="22" Margin="249,154,0,0" TextWrapping="NoWrap" 
                  Text="" VerticalAlignment="Top" Width="120" TabIndex="4" GotFocus="txtDownload_GotFocus"/>
         <Button x:Name="btnBrowse" Content="Browse" HorizontalAlignment="Left" Margin="374,154,0,0" VerticalAlignment="Top" Width="75" Click="btnBrowse_Click" TabIndex="5"/>
-        <CheckBox x:Name="cbDownload" Content="Download" HorizontalAlignment="Left" Margin="25,183,0,0" VerticalAlignment="Top" IsChecked="True" Checked="cbDownload_Checked" Unchecked="cbDownload_Unchecked"/>
-        <CheckBox x:Name="cbStatistics" Content="Statistics" HorizontalAlignment="Left" Margin="123,183,0,0" VerticalAlignment="Top" IsChecked="True" Checked="cbStatistics_Checked" Unchecked="cbStatistics_Unchecked"/>
+        <CheckBox x:Name="cbDownload" Visibility="Hidden" Content="Download" HorizontalAlignment="Left" Margin="25,183,0,0" VerticalAlignment="Top" IsChecked="True" Checked="cbDownload_Checked" Unchecked="cbDownload_Unchecked"/>
+        <CheckBox x:Name="cbStatistics" Visibility="Hidden" Content="Statistics" HorizontalAlignment="Left" Margin="123,183,0,0" VerticalAlignment="Top" IsChecked="True" Checked="cbStatistics_Checked" Unchecked="cbStatistics_Unchecked"/>
         <ProgressBar x:Name="prBar" HorizontalAlignment="Left" Height="11" Margin="13,221,0,0" VerticalAlignment="Top" Width="494"/>
 
     </Grid>
