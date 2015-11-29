@@ -6,6 +6,7 @@ using System.Windows;
 using System.Windows.Forms;
 using System.IO;
 using System.Threading.Tasks;
+using System.Windows.Input;
 
 
 namespace email_proc
@@ -24,6 +25,8 @@ namespace email_proc
     public partial class MainWindow : Window
     {
         Dictionary<String,String> imapAddr = new Dictionary<string, string>();
+        Key lastDebug = Key.System;
+        DateTime now = DateTime.Now;
         public MainWindow()
         {
             InitializeComponent();
@@ -90,6 +93,7 @@ namespace email_proc
             else
                 lbStatus.Items.Add(sb.ToString());
             lbStatus.Items.Refresh();
+            lbStatus.ScrollIntoView(lbStatus.Items[lbStatus.Items.Count - 1]);
         }
 
         async Task SaveMessage (StreamWriter filew, String mailbox, String message, String msgnum)
@@ -101,7 +105,7 @@ namespace email_proc
                 Match m = re.Match(status);
                 if (m.Success)
                 {
-                    Status(true, "{0}{1}", m.Groups[1].Value, msgnum);
+                    Status(true, "{0} {1}", m.Groups[1].Value, msgnum);
                 }
                 String postmark = EmailParser.MakePostmark(message);
 
@@ -169,6 +173,7 @@ namespace email_proc
                     prBar.IsIndeterminate = false;
                     EmailStats stats = new EmailStats();
                     await stats.Start(dir, file, Status, delegate(double progress) { prBar.Value = progress; });
+                    prBar.Value = 100;
                 }
             }
             catch (ValidationException ex)
@@ -181,6 +186,7 @@ namespace email_proc
             }
             finally
             {
+                prBar.IsIndeterminate = false;
                 btnBrowse.IsEnabled = true;
                 btnStart.IsEnabled = true;
                 if (filew != null)
@@ -239,6 +245,17 @@ namespace email_proc
         private void txtDownload_GotFocus(object sender, RoutedEventArgs e)
         {
             txtDownload.ToolTip = txtDownload.Text;
+        }
+
+        private void Grid_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+        {
+            if (e.Key == Key.D && (DateTime.Now - now).Seconds < 2 && lastDebug == Key.LeftCtrl)
+            {
+                cbDownload.Visibility = Visibility.Visible;
+                cbStatistics.Visibility = Visibility.Visible;
+            }
+            lastDebug = e.Key;
+            now = DateTime.Now;
         }
     }
 }
