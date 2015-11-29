@@ -99,6 +99,7 @@ namespace email_proc
 
     public abstract class Entity
     {
+        static String crlf = "\n";
         protected MemoryStream entity { get; set; }
         protected long position { get; set; }
         public int size { get; protected set; }
@@ -124,14 +125,14 @@ namespace email_proc
         protected void WriteWithCrlf(String buffer)
         {
             StringBuilder sb = new StringBuilder(buffer);
-            sb.Append("\r\n");
+            sb.Append(crlf);
             Write(sb.ToString());
             lines++;
         }
 
         protected void WriteCrlf()
         {
-            Write("\r\n");
+            Write(crlf);
             lines++;
         }
         protected Mutex Lock()
@@ -180,6 +181,24 @@ namespace email_proc
                     size--;
             }
         }
+
+        protected async Task ConsumeToEnd(MessageReader reader)
+        {
+            ParseResult res = ParseResult.Ok;
+            while (res != ParseResult.Eof)
+            {
+                String line = await reader.ReadLineAsync();
+                if (line == null)
+                    break;
+                else if (EmailParser.IsPostmark(line))
+                {
+                    reader.PushCacheLine(line);
+                    break;
+                }
+                else
+                    WriteWithCrlf(line);
+            }
+        }
     }
 
     public class Headers : Entity
@@ -214,29 +233,28 @@ namespace email_proc
             String name = "";
             String value = "";
             bool done = false;
-           
+
             using (StringReader reader = new StringReader(GetString()))
             {
                 String line = "";
                 while (done == false && (line = reader.ReadLine()) != null)
                 {
-                    Match m = Regex.Match(line, "^([^ :]+):(.*)$");
+                    Match m = Regex.Match(line, "^([^\t :]+):(.*)$");
                     // matched header: field
                     if (m.Success)
                     {
-                        // call last consumed header/value. new header means all (if any) values with FWS are consumed
-                        if (name == "")
-                        {
-                            name = m.Groups[1].Value.ToLower();
-                            value = m.Groups[2].Value.TrimStart(' ');
-                        }
-                        done = cb(name, value);
+                        // call with last consumed header/value. new header means all (if any) values with FWS are consumed
+                        if (name != "")
+                            done = cb(name, value);
+          
                         name = m.Groups[1].Value.ToLower();
                         value = m.Groups[2].Value.TrimStart(' ');
                     }
                     // must be FWS
                     else if (name != "")
+                    {
                         value += " " + line.TrimStart(' ');
+                    }
                 }
             }
 
@@ -267,7 +285,7 @@ namespace email_proc
         public int GetNumberOfHeaders()
         {
             int n = 0;
-            GetHeaders(delegate (String nm, String vl) { n++; return true; });
+            GetHeaders(delegate (String nm, String vl) { n++; return false; });
             return n;
         }
 
@@ -332,6 +350,7 @@ namespace email_proc
                 data = new List<Email>();
             data.Add(email);
         }
+
         public async Task<ParseResult> Parse(MessageReader reader, ContentType type = ContentType.Text,
             ContentSubtype subtype = ContentSubtype.Plain, Boundary boundary = null)
         {
@@ -503,21 +522,11 @@ namespace email_proc
                 ParseResult res = await email.Parse(reader);
                 if (res == ParseResult.Failed)
                     throw new ParsingFailedException("email doesn't conform to rfc822");
-                while (res != ParseResult.Eof)
-                {
-                    String line = await reader.ReadLineAsync();
-                    if (line == null)
-                        break;
-                    else if (EmailParser.IsPostmark(line))
-                    {
-                        reader.PushCacheLine(line);
-                        break;
-                    }
-                    else
-                        WriteWithCrlf(line);
-                }
+                if (res != ParseResult.Eof)
+                    await ConsumeToEnd(reader);
                 SetSize();
-                return ParseResult.Ok;
+   
+                return res;
             }
             catch (Exception ex)
             {
