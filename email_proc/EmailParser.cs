@@ -1,4 +1,20 @@
-﻿using System;
+﻿/* 
+ * Copyright(c) 2015-2016 Gregory Tsipenyuk<gt303@cam.ac.uk>
+ *  
+ * Permission to use, copy, modify, and distribute this software for any
+ * purpose with or without fee is hereby granted, provided that the above 
+ * copyright notice and this permission notice appear in all copies. 
+ *  
+ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES 
+ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF 
+ * MERCHANTABILITY AND FITNESS.IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES 
+ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+ * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ */
+
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -206,6 +222,7 @@ namespace email_proc
         public delegate bool HeaderCb(String name, String value);
         public ContentType contentType { get; private set; }
         public ContentSubtype contentSubtype { get; private set; }
+        public String contentTypeFullStr { get; private set; }
         public Boundary boundary { get; private set; }
         static Dictionary<string, ContentType> types = new Dictionary<string, ContentType>()
             { { "audo", ContentType.Audio }, {"video", ContentType.Video}, {"image",ContentType.Image }, {"application",ContentType.Application },
@@ -216,6 +233,7 @@ namespace email_proc
         static Regex re_content = new Regex("^content-type: ([^/ ]+)/([^; ]+)(.*)$", RegexOptions.IgnoreCase);
         public Headers(MemoryStream entity, ContentType outerType = ContentType.Text, ContentSubtype outerSubtype = ContentSubtype.Plain):base(entity)
         {
+            contentTypeFullStr = "";
             if (outerType == ContentType.Multipart && outerSubtype == ContentSubtype.Digest)
             {
                 contentType = ContentType.Message;
@@ -312,9 +330,12 @@ namespace email_proc
                     {
                         ContentType type = ContentType.Text;
                         ContentSubtype subtype = ContentSubtype.Plain;
-                        if (types.TryGetValue(m.Groups[1].Value.ToLower(), out type) == true)
+                        String tp = m.Groups[1].Value.ToLower();
+                        String sbtp = m.Groups[2].Value.ToLower();
+                        contentTypeFullStr = tp + "/" + sbtp;
+                        if (types.TryGetValue(tp, out type) == true)
                             contentType = type;
-                        if (subtypes.TryGetValue(m.Groups[2].Value.ToLower(), out subtype) == true)
+                        if (subtypes.TryGetValue(sbtp, out subtype) == true)
                             contentSubtype = subtype;
                         foundContentType = true;
                         if (contentType == ContentType.Multipart)
