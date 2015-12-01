@@ -110,7 +110,7 @@ namespace email_proc
         }
         protected override async Task<Return> ParseInternal(InputType t, string str)
         {
-            Regex re = new Regex(@"^\* list \(([^)]+)\) ([^ ]+) ([^ ]+)$", RegexOptions.IgnoreCase);
+            Regex re = new Regex(@"^\* list \(([^)]+)\) ([^ ]+) (.+)$", RegexOptions.IgnoreCase);
             Match m = re.Match(str);
             if (m.Success && Regex.IsMatch(m.Groups[1].Value, "noselect", RegexOptions.IgnoreCase) == false)
             {
@@ -175,9 +175,9 @@ namespace email_proc
     */
     public class StatusCommand : Command
     {
-        public StatusCommand(CmdCb cb) : base(cb)
+        public StatusCommand(String mailbox, CmdCb cb) : base(cb)
         {
-            Append("status\r\n");
+            Append("status {0} (messages)\r\n", mailbox);
         }
 
         protected override async Task<Return> ParseInternal(InputType t, string str)
@@ -260,7 +260,7 @@ namespace email_proc
                     Append("body[text]");
                     break;
                 case Fetch.MessageID:
-                    Append("body[header.fields (Message-ID)");
+                    Append("body[header.fields (Message-ID)]");
                     break;
                 default:
                     Append("body[]");
