@@ -214,7 +214,7 @@ namespace email_proc
                 });
                 status(false, "Statistics is generated in file {0}", file);
                 TimeSpan span = DateTime.Now - start_time;
-                status(false, "Processing time: {0} seconds", span.Seconds);
+                status(false, "Processing time: {0} seconds", span.TotalSeconds);
             } 
             catch (Exception ex)
             {
