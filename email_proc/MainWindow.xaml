@@ -6,15 +6,15 @@
         xmlns:local="clr-namespace:email_proc"
         mc:Ignorable="d"
         Title="Email Downloader" Height="463.477" Width="525">
-    <Grid KeyDown="Grid_KeyDown">
-        <ListBox x:Name="lbStatus" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Margin="15,261,5,10" Width="497" 
+    <Grid KeyDown="Grid_KeyDown" Margin="0,0,-8,-3">
+        <ListBox x:Name="lbStatus" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Margin="10,261,18,10" 
                    ScrollViewer.VerticalScrollBarVisibility="Auto" ScrollViewer.HorizontalScrollBarVisibility="Auto"/>
-        <Label x:Name="label" Content="Your Proivedr's IMAP server address (name or IP):" HorizontalAlignment="Left" Margin="25,27,0,0" VerticalAlignment="Top" Height="31" ToolTip="Click on the right down arrow to expand"/>
+        <Label x:Name="label" Content="Your Provider's IMAP server address (name or IP):" HorizontalAlignment="Left" Margin="25,27,0,0" VerticalAlignment="Top" Height="31" ToolTip="Click on the right down arrow to expand the list"/>
         <Label x:Name="label1" Content="IMAP server port:" HorizontalAlignment="Left" Margin="25,58,0,0" VerticalAlignment="Top" Height="26"/>
         <TextBox x:Name="txtPort" HorizontalAlignment="Left" Height="23" Margin="296,58,0,0" TextWrapping="Wrap" Text="993" VerticalAlignment="Top" Width="42" TabIndex="1"/>
-        <ComboBox x:Name="cbAddr" HorizontalAlignment="Left" Margin="296,27,0,0" VerticalAlignment="Top" Width="197" IsEditable="True" TabIndex="0" ToolTip="Click on the right down arrow to expand"/>
+        <ComboBox x:Name="cbAddr" HorizontalAlignment="Left" Margin="296,27,0,0" VerticalAlignment="Top" Width="197" IsEditable="True" TabIndex="0" ToolTip="Click on the right down arrow to expand the list"/>
         <Button x:Name="btnStart" Content="Start" HorizontalAlignment="Left" Margin="216,212,0,0" VerticalAlignment="Top" Width="75" Click="btnStart_Click"/>
-        <Label x:Name="lblDownload" Content="Download directory:" HorizontalAlignment="Left" Margin="25,163,0,0" VerticalAlignment="Top" Height="26" ToolTip="Directory or file with the downloaded email"/>
+        <Label x:Name="lblDownload" Content="Choose directory where generated files are saved:" HorizontalAlignment="Left" Margin="25,163,0,0" VerticalAlignment="Top" Height="26" ToolTip="Directory where downloaded email and generated statistics will be saved"/>
         <Label x:Name="label3" Content="Email account name:" HorizontalAlignment="Left" Margin="25,89,0,0" VerticalAlignment="Top" Height="26"/>
         <TextBox x:Name="txtUser" HorizontalAlignment="Left" Height="23" Margin="296,89,0,0" TextWrapping="Wrap" Text="" VerticalAlignment="Top" Width="197" TabIndex="2"/>
         <Label x:Name="label4" Content="Email account password:" HorizontalAlignment="Left" Margin="25,123,0,0" VerticalAlignment="Top"/>
@@ -24,8 +24,9 @@
         <Button x:Name="btnBrowse" Content="Browse" HorizontalAlignment="Left" Margin="421,165,0,0" VerticalAlignment="Top" Width="75" Click="btnBrowse_Click" TabIndex="5"/>
         <CheckBox x:Name="cbDownload" Visibility="Hidden" Content="Download" HorizontalAlignment="Left" Margin="25,194,0,0" VerticalAlignment="Top" IsChecked="True" Checked="cbDownload_Checked" Unchecked="cbDownload_Unchecked"/>
         <CheckBox x:Name="cbStatistics" Visibility="Hidden" Content="Statistics" HorizontalAlignment="Left" Margin="123,194,0,0" VerticalAlignment="Top" IsChecked="True" Checked="cbStatistics_Checked" Unchecked="cbStatistics_Unchecked"/>
-        <ProgressBar x:Name="prBar" HorizontalAlignment="Left" Height="11" Margin="13,239,0,0" VerticalAlignment="Top" Width="494"/>
-        <Label x:Name="label2" Content="Select Your Email Provider or enter" HorizontalAlignment="Left" Margin="25,9,0,0" VerticalAlignment="Top" ToolTip="Click on the right down arrow to expand"/>
+        <ProgressBar x:Name="prBar" HorizontalAlignment="Left" Height="11" Margin="13,239,0,0" VerticalAlignment="Top" Width="494"
+                     Minimum="0" Maximum="100" IsIndeterminate="False"/>
+        <Label x:Name="label2" Content="Select Your Email Provider or enter" HorizontalAlignment="Left" Margin="25,9,0,0" VerticalAlignment="Top" ToolTip="Click on the right down arrow to expand the list"/>
 
     </Grid>
 </Window>

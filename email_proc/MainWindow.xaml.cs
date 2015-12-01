@@ -152,27 +152,40 @@ namespace email_proc
                 StringBuilder sb = new StringBuilder();
                 if ((bool)cbDownload.IsChecked)
                 {
-                    prBar.IsIndeterminate = true;
-                    sb.AppendFormat(@"{0}\arch{1}.mbox", txtDownload.Text, DateTime.Now.ToFileTime());
-                    file = sb.ToString();
                     dir = txtDownload.Text;
-                    filew = new StreamWriter(file);
+                    sb.AppendFormat(@"{0}\arch{1}.mbox", dir, DateTime.Now.ToFileTime());
+                    file = sb.ToString();
+                    sb.Clear();
+                    sb.AppendFormat(@"{0}\email_proc1596.index", dir);
+                    bool resume = false;
+                    if (File.Exists(sb.ToString()))
+                    {
+                        resume = true;
+                        file = File.ReadAllText(sb.ToString());
+                    }
+                    else
+                        File.WriteAllText(sb.ToString(), file);
                     String addr = cbAddr.Text;
                     if (imapAddr.ContainsKey(addr))
                         addr = imapAddr[addr];
-                    StateMachine sm = new StateMachine(addr, int.Parse(txtPort.Text), txtUser.Text, txtPassword.Password);
+                    StateMachine sm = new StateMachine(addr, int.Parse(txtPort.Text), txtUser.Text, txtPassword.Password, file);
                     DateTime start_time = DateTime.Now;
                     await sm.Start(
-                        delegate (String format, string[] args)
+                        delegate (String format, object[] args)
                         {
                             Status(false, format, args);
                         },
                         async delegate (String mailbox, String message, String msgnum) 
-                            { prBar.Value = 0.0; await SaveMessage(filew, mailbox, message, msgnum); }
+                            {
+                                if (filew == null)
+                                    filew = new StreamWriter(file, resume);
+                                await SaveMessage(filew, mailbox, message, msgnum);
+                            },
+                        delegate (double progress) { prBar.Value = progress; }
                     );
                     Status(false, "Downloaded email to {0}", file);
                     TimeSpan span = DateTime.Now - start_time;
-                    Status(false, "Processing time {0} seconds", span.Seconds);
+                    Status(false, "Download time {0} seconds", span.TotalSeconds);
                     filew.Close();
                 }
                 else
@@ -182,14 +195,22 @@ namespace email_proc
                 }
                 if ((bool)cbStatistics.IsChecked)
                 {
-                    prBar.Visibility = Visibility.Visible;
-                    prBar.Minimum = 0;
-                    prBar.Maximum = 100;
-                    prBar.IsIndeterminate = false;
                     EmailStats stats = new EmailStats();
                     await stats.Start(dir, file, Status, delegate(double progress) { prBar.Value = progress; });
                     prBar.Value = 100;
                 }
+            }
+            catch (FailedLoginException)
+            {
+                Status(false, "Login failed, invalid user or password");
+            }
+            catch (FailedException)
+            {
+                Status(false, "Failed to download");
+            }
+            catch (SslFailedException)
+            {
+                Status(false, "Failed to establish secure connection");
             }
             catch (ValidationException ex)
             {

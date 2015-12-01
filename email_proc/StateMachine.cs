@@ -23,8 +23,9 @@ using System.IO.Compression;
 
 namespace email_proc
 {
-    public delegate void StatusCb(String format, params string [] args);
+    public delegate void StatusCb(String format, params object [] args);
     public delegate Task DataCb(String mailbox, String message, String msgnum);
+    public delegate void ProgressCb(double progress);
     class FailedLoginException : Exception
     {
         public FailedLoginException() { }
@@ -46,8 +47,10 @@ namespace email_proc
     {
         String user { get; set; }
         String pswd { get; set; }
+        String dldFile { get; set; }
         ImapConnect connect { get; set; }
-        public StateMachine(String host, int port, String user, String pswd)
+        Dictionary<String, String> messageid;
+        public StateMachine(String host, int port, String user, String pswd, String dldFile)
         {
             Regex rx = new Regex("^[ ]*([^ \t@]+)(@.+)?$");
             Match m = rx.Match(user);
@@ -56,6 +59,8 @@ namespace email_proc
             else
                 this.user = user.Trim(' ');
             this.pswd = pswd;
+            this.dldFile = dldFile;
+            messageid = new Dictionary<string, string>();
             connect = new ImapConnect(host, port);
         }
 
@@ -64,7 +69,52 @@ namespace email_proc
             StreamReader reader = new StreamReader(strm, Encoding.Default, false, 2048, true);
             return new ImapCmd(reader, strm);
         }
-        public async Task Start(StatusCb status, DataCb data, bool compression=false)
+
+        async Task<Dictionary<String,int>> CheckResume(StatusCb status, ProgressCb progress, bool isgmail)
+        {
+            Dictionary<String, int> downloaded = new Dictionary<string, int>();
+            if (File.Exists(dldFile))
+            {
+                try {
+                    Regex rx_mbox = new Regex("^X-Mailbox: (.+)$");
+                    Regex rx_msgid = new Regex("^message-id: ([^ ]+)", RegexOptions.IgnoreCase);
+                    int read = 0;
+                    int cnt = 0;
+                    FileInfo info = new FileInfo(dldFile);
+                    long length = info.Length;
+                    status("Resuming download");
+                    status("Calculating resume point...");
+                    using (StreamReader reader = new StreamReader(info.OpenRead()))
+                    {
+                        String line = "";
+                        while ((line = await reader.ReadLineAsync()) != null)
+                        {
+                            Match m = rx_mbox.Match(line);
+                            progress((100.0 * cnt) / length);
+                            if (m.Success)
+                            {
+                                if (downloaded.ContainsKey(m.Groups[1].Value) == false)
+                                    downloaded[m.Groups[1].Value] = 0;
+                                downloaded[m.Groups[1].Value]++;
+                                read = 0;
+                            }
+                            else if (isgmail && read < 5000)
+                            {
+                                m = rx_msgid.Match(line);
+                                if (m.Success)
+                                    messageid[m.Groups[1].Value] = "";
+                            }
+                            read += line.Length;
+                            cnt += line.Length + 1;
+                        }
+                        progress(100);
+                    }
+                } catch (Exception ex) {; }
+            }
+
+            return downloaded;
+        }
+        public async Task Start(StatusCb status, DataCb data, ProgressCb progress, bool compression=false)
         {
             try
             {
@@ -96,38 +146,124 @@ namespace email_proc
                     status("Compression enabled");
                 }
                 // get the list of mailboxes
+                status("Fetching mailbox list...");
                 List<String> mailboxes = new List<string>();
-                if (await cmd.Run(new ListCommand(async delegate (String mailbox, String ctx) 
+                if (await cmd.Run(new ListCommand(async delegate (String mailbox, String ctx)
                         { await Task.Yield(); mailboxes.Add(mailbox); })) != ReturnCode.Ok)
                     throw new FailedException();
+                int total = 0;
+                int processed = 0;
+                bool isgmail = false;
+                mailboxes.Sort();
+                Regex rx_gmail = new Regex("^\"[[]Gmail[]]/");
+                Dictionary<String, int> statusCnt = new Dictionary<string, int>();
+                foreach (String mailbox1 in mailboxes)
+                {
+                    await cmd.Run(new StatusCommand(mailbox1, async delegate (String cnt, String ctx)
+                    {
+                        await Task.Yield();
+                        status("{0} - {1}", mailbox1, cnt);
+                        int res = 0;
+                        if (int.TryParse(cnt, out res))
+                            total += res;
+                        statusCnt[mailbox1] = res;
+                    }));
+                    if (rx_gmail.IsMatch(mailbox1))
+                        isgmail = true;
+                }
+                if (isgmail)
+                {
+                    mailboxes.Remove("\"[Gmail]/Important\"");
+                    mailboxes.Remove("\"[Gmail]/All Mail\"");
+                    mailboxes.Remove("\"[Gmail]/Sent Mail\"");
+                    mailboxes.Remove("\"[Gmail]/Trash\"");
+                    mailboxes.Add("\"[Gmail]/Sent Mail\"");
+                    mailboxes.Add("\"[Gmail]/Trash\"");
+                    mailboxes.Add("\"[Gmail]/Important\"");
+                    mailboxes.Add("\"[Gmail]/All Mail\"");
+                }
+                status("Total messages: {0}", total);
+                Regex rx_msgid = new Regex("^message-id: ([^ \r\n]+)", RegexOptions.IgnoreCase | RegexOptions.Multiline);
+                Dictionary<String, int> downloaded = await CheckResume(status, progress, isgmail);
                 status("Downloading ...");
+                progress(0);
                 foreach (String mailbox in mailboxes)
                 {
+                    int start = downloaded.TryGetValue(mailbox, out start) && start > 0 ? start : 1;
+                    int statusMessages = 0;
                     String messages = "0";
-                    if (await cmd.Run(new SelectCommand(mailbox, async delegate (String exists, String ctx) 
-                            { await Task.Yield(); messages = exists; })) != ReturnCode.Ok)
-                        throw new FailedException();
-                    status("{0} - {1} messages: ", mailbox, messages);
-                    if (messages != "0" &&
-                        await cmd.Run(new FetchCommand(FetchCommand.Fetch.Body, 
-                            async delegate (String message, String msgn) { await data(mailbox, message, msgn); })) != ReturnCode.Ok)
-                            status("No messages downloaded");
-  
+                    if (statusCnt.TryGetValue(mailbox, out statusMessages) && start < statusMessages)
+                    {
+                        if (await cmd.Run(new SelectCommand(mailbox, async delegate (String exists, String ctx)
+                                { await Task.Yield(); messages = exists; })) != ReturnCode.Ok)
+                            throw new FailedException();
+                        status("{0} - {1} messages: ", mailbox, messages);
+                        if (messages != "0")
+                        {
+                            if (mailbox != "\"[Gmail]/Sent Mail\"" && mailbox != "\"[Gmail]/Trash\"" &&
+                                mailbox != "\"[Gmail]/Important\"" && mailbox != "\"[Gmail]/All Mail\"")
+                            {
+                                if (await cmd.Run(new FetchCommand(FetchCommand.Fetch.Body,
+                                    async delegate (String message, String msgn)
+                                    {
+                                        if (isgmail)
+                                        {
+                                            int len = message.Length > 5000 ? 5000 : message.Length;
+                                            Match m = rx_msgid.Match(message, 0, len);
+                                            if (m.Success)
+                                                messageid[m.Groups[1].Value] = "";
+                                        }
+                                        progress((100.0 * (processed + int.Parse(msgn))) / total);
+                                        await data(mailbox, message, msgn);
+                                    }, start)) != ReturnCode.Ok)
+                                    status("No messages downloaded");
+                            }
+                            else
+                            {
+                                List<String> unique = new List<string>();
+                                if (await cmd.Run(new FetchCommand(FetchCommand.Fetch.MessageID,
+                                    async delegate (String message, String msgn)
+                                    {
+                                        await Task.Yield();
+                                        Match m = rx_msgid.Match(message);
+                                        if (m.Success)
+                                        {
+                                            String msgid = m.Groups[1].Value;
+                                            if (messageid.ContainsKey(msgid))
+                                                return;
+                                            messageid[msgid] = "";
+                                            unique.Add(msgn);
+                                        }
+                                        else
+                                            unique.Add(msgn);
+                                    })) != ReturnCode.Ok)
+                                {
+                                    status("No messages downloaded");
+                                }
+                                else
+                                {
+                                    foreach (String n in unique)
+                                    {
+                                        int num = int.Parse(n);
+                                        await cmd.Run(new FetchCommand(FetchCommand.Fetch.Body,
+                                            async delegate (String message, String msgn)
+                                            {
+                                                progress((100.0 * (processed + int.Parse(msgn))) / total);
+                                                await data(mailbox, message, msgn);
+                                            }, num, num));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    processed += int.Parse(messages);
                 }
                 status("Download complete");
+                StringBuilder sb = new StringBuilder();
+                sb.AppendFormat(@"{0}\email_proc1596.index", Path.GetDirectoryName(dldFile));
+                File.Delete(sb.ToString());
             }
-            catch (FailedLoginException)
-            {
-                status("Logged in failed, invalid user or password");
-            }
-            catch (FailedException)
-            {
-                status("Failed to download");
-            }
-            catch (SslFailedException)
-            {
-                status("Failed to establish secure connection");
-            }
+            catch { }
             finally
             {
                 connect.Close();
