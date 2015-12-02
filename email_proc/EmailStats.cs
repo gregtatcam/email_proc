@@ -19,6 +19,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.IO;
 using System.IO.Compression;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Security.Cryptography;
 
@@ -34,6 +35,7 @@ namespace email_proc
         Dictionary<String, int> subject { get; set; }
         Dictionary<String, int> messageid { get; set; }
         Dictionary<String, int> inreplyto { get; set; }
+        CancellationToken token { get; set; }
 
         void InitMailboxes()
         {
@@ -53,7 +55,7 @@ namespace email_proc
             GetUnique(mailboxes, "drafts");
             GetUnique(mailboxes, "\"[Gmail]/Drafts\"");
         }
-        public EmailStats()
+        public EmailStats(CancellationToken token)
         {
             emailAddr = new Dictionary<string, int>();
             attachments = new Dictionary<string, int>();
@@ -61,6 +63,7 @@ namespace email_proc
             subject = new Dictionary<string, int>();
             messageid = new Dictionary<string, int>();
             inreplyto = new Dictionary<string, int>();
+            this.token = token;
             InitMailboxes();
         }
 
@@ -176,7 +179,7 @@ namespace email_proc
                 filew = new StreamWriter(file);
                 DateTime start_time = DateTime.Now;
                 await WriteStatsLine(filew, "archive size: {0}\n", size);
-                await EmailParser.ParseMessages(reader, async delegate (Message message)
+                await EmailParser.ParseMessages(token, reader, async delegate (Message message)
                 {
                     try {
                         // display progress

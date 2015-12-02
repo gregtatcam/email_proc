@@ -10,11 +10,11 @@
         <ListBox x:Name="lbStatus" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Margin="10,261,18,10" 
                    ScrollViewer.VerticalScrollBarVisibility="Auto" ScrollViewer.HorizontalScrollBarVisibility="Auto"/>
         <Label x:Name="label" Content="Your Provider's IMAP server address (name or IP):" HorizontalAlignment="Left" Margin="25,27,0,0" VerticalAlignment="Top" Height="31" ToolTip="Click on the right down arrow to expand the list"/>
-        <Label x:Name="label1" Content="IMAP server port:" HorizontalAlignment="Left" Margin="25,58,0,0" VerticalAlignment="Top" Height="26"/>
+        <Label x:Name="label1" Content="IMAP server port(leave 993 if not sure):" HorizontalAlignment="Left" Margin="25,58,0,0" VerticalAlignment="Top" Height="26"/>
         <TextBox x:Name="txtPort" HorizontalAlignment="Left" Height="23" Margin="296,58,0,0" TextWrapping="Wrap" Text="993" VerticalAlignment="Top" Width="42" TabIndex="1"/>
         <ComboBox x:Name="cbAddr" HorizontalAlignment="Left" Margin="296,27,0,0" VerticalAlignment="Top" Width="197" IsEditable="True" TabIndex="0" ToolTip="Click on the right down arrow to expand the list"/>
         <Button x:Name="btnStart" Content="Start" HorizontalAlignment="Left" Margin="216,212,0,0" VerticalAlignment="Top" Width="75" Click="btnStart_Click"/>
-        <Label x:Name="lblDownload" Content="Choose directory where generated files are saved:" HorizontalAlignment="Left" Margin="25,163,0,0" VerticalAlignment="Top" Height="26" ToolTip="Directory where downloaded email and generated statistics will be saved"/>
+        <Label x:Name="lblDownload" Content="Choose directory where generated files are saved:" HorizontalAlignment="Left" Margin="25,164,0,0" VerticalAlignment="Top" Height="26" ToolTip="Directory where downloaded email and generated statistics will be saved"/>
         <Label x:Name="label3" Content="Email account name:" HorizontalAlignment="Left" Margin="25,89,0,0" VerticalAlignment="Top" Height="26"/>
         <TextBox x:Name="txtUser" HorizontalAlignment="Left" Height="23" Margin="296,89,0,0" TextWrapping="Wrap" Text="" VerticalAlignment="Top" Width="197" TabIndex="2"/>
         <Label x:Name="label4" Content="Email account password:" HorizontalAlignment="Left" Margin="25,123,0,0" VerticalAlignment="Top"/>

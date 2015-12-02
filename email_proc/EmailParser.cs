@@ -18,10 +18,10 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Text.RegularExpressions;
 using System.IO;
-using System.Threading;
 
 namespace email_proc
 {
@@ -605,10 +605,12 @@ namespace email_proc
             return sb.ToString();
         }
 
-        public async static Task ParseMessages(MessageReader reader, MessageCb cb)
+        public async static Task ParseMessages(CancellationToken token, MessageReader reader, MessageCb cb)
         {
             while (reader.EndOfStream == false)
             {
+                if (token.IsCancellationRequested)
+                    break;
                 Message message = new Message();
                 if (await message.Parse(reader) != ParseResult.Failed)
                     await cb(message);

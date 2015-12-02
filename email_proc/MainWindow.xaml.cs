@@ -20,6 +20,7 @@ using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Forms;
 using System.IO;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Input;
 
@@ -34,6 +35,7 @@ namespace email_proc
             this.reason = reason;
         }
     }
+
     /// <summary>
     /// Interaction logic for MainWindow.xaml
     /// </summary>
@@ -42,6 +44,7 @@ namespace email_proc
         Dictionary<String,String> imapAddr = new Dictionary<string, string>();
         Key lastDebug = Key.System;
         DateTime now = DateTime.Now;
+        CancellationTokenSource cancelSrc = new CancellationTokenSource();
         public MainWindow()
         {
             InitializeComponent();
@@ -70,6 +73,12 @@ namespace email_proc
             cbAddr.ItemsSource = imap;
         }
 
+        private void MainWindow_Closing(object sender, System.ComponentModel.CancelEventArgs e)
+        {
+            cancelSrc.Cancel();
+            Thread.Sleep(10000);
+        }
+
         void Validate()
         {
             String error = "Email archive must be entered";
@@ -87,18 +96,6 @@ namespace email_proc
                 throw new ValidationException(error);
         }
 
-        private async void btnStart_ClickTest(object sender, RoutedEventArgs e)
-        {
-            //MessageReader reader = new MessageReader(@"c:\Downloads\arch130927535041968465.mbox");
-            MessageReader reader = new MessageReader(new MemoryStream(Encoding.ASCII.GetBytes(Tests.NestedMultipart())));
-            await EmailParser.ParseMessages(reader, async delegate (Message message)
-            {
-                String postmark = message.postmark.GetString();
-                await Task.Run(() => { EmailParser.TraverseEmail(message.email); });
-            });
-            return;
-        }
-
         void Status(bool cr, String format, params object[] args)
         {
             StringBuilder sb = new StringBuilder();
@@ -111,7 +108,7 @@ namespace email_proc
             lbStatus.ScrollIntoView(lbStatus.Items[lbStatus.Items.Count - 1]);
         }
 
-        async Task SaveMessage (StreamWriter filew, String mailbox, String message, String msgnum)
+        async Task SaveMessage (StreamWriter filew, StreamWriter indexw, String mailbox, String message, String msgid, String msgnum)
         {
             try
             {
@@ -128,6 +125,7 @@ namespace email_proc
                 await filew.WriteAsync("\r\n");
                 await filew.WriteAsync("X-Mailbox: " + mailbox);
                 await filew.WriteAsync("\r\n");
+                await indexw.WriteLineAsync(mailbox + (msgid != "" ? " " + msgid : ""));
             }
             catch (AlreadyExistsException)
             {
@@ -140,62 +138,90 @@ namespace email_proc
 
         private async void btnStart_Click(object sender, RoutedEventArgs e)
         {
+            if ((String)btnStart.Content == "Cancel")
+            {
+                cancelSrc.Cancel();
+                btnStart.Content = "Start";
+                btnBrowse.IsEnabled = true;
+                return;
+            }
             StreamWriter filew = null;
+            StreamWriter indexw = null;
             String file = null;
             String dir = null;
             try {
                 Validate();
                 lbStatus.Items.Clear();
                 lbStatus.Items.Refresh();
-                btnStart.IsEnabled = false;
+                btnStart.Content = "Cancel";
                 btnBrowse.IsEnabled = false;
                 StringBuilder sb = new StringBuilder();
                 if ((bool)cbDownload.IsChecked)
                 {
-                    dir = txtDownload.Text;
-                    sb.AppendFormat(@"{0}\arch{1}.mbox", dir, DateTime.Now.ToFileTime());
-                    file = sb.ToString();
-                    sb.Clear();
-                    sb.AppendFormat(@"{0}\email_proc1596.index", dir);
-                    bool resume = false;
-                    if (File.Exists(sb.ToString()))
-                    {
-                        resume = true;
-                        file = File.ReadAllText(sb.ToString());
-                    }
-                    else
-                        File.WriteAllText(sb.ToString(), file);
                     String addr = cbAddr.Text;
                     if (imapAddr.ContainsKey(addr))
                         addr = imapAddr[addr];
-                    StateMachine sm = new StateMachine(addr, int.Parse(txtPort.Text), txtUser.Text, txtPassword.Password, file);
+                    dir = txtDownload.Text;
+                    sb.AppendFormat(@"{0}\arch{1}.mbox", dir, DateTime.Now.ToFileTime());
+                    file = sb.ToString();
+                    String indexFile = Path.Combine(dir, "email_proc1596.index");
+                    bool resume = false;
+                    String downloadedFile = "";
+                    if (File.Exists(indexFile))
+                    {
+                        using (StreamReader reader = new StreamReader(indexFile))
+                        {
+                            String line = reader.ReadLine();
+                            if (line != null)
+                            {
+                                Match m = Regex.Match(line, "^([^ ]+) ([^ ]+) (.+)$");
+                                if (m.Success && m.Groups[1].Value == addr && m.Groups[2].Value == txtUser.Text)
+                                    downloadedFile = m.Groups[3].Value;
+                            }
+                        }
+                    }
+                    if (downloadedFile == "")
+                    {
+                        using (StreamWriter writer = new StreamWriter(indexFile))
+                        {
+                            writer.WriteLine(addr + " " + txtUser.Text + " " + file);
+                        }
+                    }
+                    else
+                        resume = true;
+                    filew = new StreamWriter(file, resume);
+                    StateMachine sm = new StateMachine(cancelSrc.Token, addr, int.Parse(txtPort.Text), txtUser.Text, txtPassword.Password, file);
                     DateTime start_time = DateTime.Now;
                     await sm.Start(
                         delegate (String format, object[] args)
                         {
                             Status(false, format, args);
                         },
-                        async delegate (String mailbox, String message, String msgnum) 
-                            {
-                                if (filew == null)
-                                    filew = new StreamWriter(file, resume);
-                                await SaveMessage(filew, mailbox, message, msgnum);
-                            },
+                        async delegate (String mailbox, String message, String msgid, String msgnum) 
+                        {
+                            if (indexw == null)
+                                indexw = new StreamWriter(indexFile, true);
+                            await SaveMessage(filew, indexw, mailbox, message, msgid, msgnum);
+                        },
                         delegate (double progress) { prBar.Value = progress; }
                     );
                     Status(false, "Downloaded email to {0}", file);
                     TimeSpan span = DateTime.Now - start_time;
                     Status(false, "Download time {0} seconds", span.TotalSeconds);
                     filew.Close();
+                    filew = null;
+                    indexw.Close();
+                    indexw = null;
+                    File.Delete(indexFile);
                 }
                 else
                 {
                     file = txtDownload.Text;
                     dir = Path.GetDirectoryName(txtDownload.Text);
                 }
-                if ((bool)cbStatistics.IsChecked)
+                if ((bool)cbStatistics.IsChecked && !cancelSrc.Token.IsCancellationRequested)
                 {
-                    EmailStats stats = new EmailStats();
+                    EmailStats stats = new EmailStats(cancelSrc.Token);
                     await stats.Start(dir, file, Status, delegate(double progress) { prBar.Value = progress; });
                     prBar.Value = 100;
                 }
@@ -223,10 +249,13 @@ namespace email_proc
             finally
             {
                 prBar.IsIndeterminate = false;
+                prBar.Value = 0;
                 btnBrowse.IsEnabled = true;
-                btnStart.IsEnabled = true;
+                btnStart.Content = "Start";
                 if (filew != null)
                     filew.Close();
+                if (indexw != null)
+                    indexw.Close();
             }
         }
 
@@ -252,9 +281,9 @@ namespace email_proc
             txtUser.IsEnabled = download;
             cbAddr.IsEnabled = download;
             if (download)
-                lblDownload.Content = "Download directory:";
+                lblDownload.Content = "Choose directory where generated files are saved:";
             else
-                lblDownload.Content = "Email archive:";
+                lblDownload.Content = "Choose downloaded email archive:";
         }
 
         private void cbDownload_Checked(object sender, RoutedEventArgs e)

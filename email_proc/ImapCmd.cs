@@ -16,6 +16,7 @@
 using System;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using System.IO;
 using System.Text.RegularExpressions;
@@ -23,7 +24,7 @@ using System.IO.Compression;
 
 namespace email_proc
 {
-    public enum ReturnCode { Ok, No, Bad, Failed }
+    public enum ReturnCode { Ok, No, Bad, Failed, Cancelled }
 
     public abstract class Command
     {
@@ -205,7 +206,7 @@ namespace email_proc
      */
     public class SelectCommand : Command
     {
-        public SelectCommand(String mailbox,CmdCb cb) : base(cb)
+        public SelectCommand(String mailbox,CmdCb cb=null) : base(cb)
         {
             Append("select {0}\r\n", mailbox);
         }
@@ -214,7 +215,7 @@ namespace email_proc
         {
             Regex re = new Regex(@"^\* ([0-9]+) exists", RegexOptions.IgnoreCase);
             Match m = re.Match(str);
-            if (m.Success)
+            if (m.Success && cb != null)
                 await cb(m.Groups[1].Value);
             return (new Return(MoreInput.Line));
         }
@@ -313,12 +314,14 @@ namespace email_proc
         Stream writer { get; set; }
         Command command { get; set; }
         bool compress { get; set; }
+        CancellationToken token { get; set; }
 
-        public ImapCmd(StreamReader reader, Stream writer, bool compress = false)
+        public ImapCmd(CancellationToken token, StreamReader reader, Stream writer, bool compress = false)
         {
             this.reader = reader;
             this.writer = writer;
             this.compress = compress;
+            this.token = token;
         }
 
         async Task Write(String str)
@@ -345,6 +348,11 @@ namespace email_proc
                 // read until Ok,Bad,No, if there is literal at the end then read the block
                 for (Command.Return ret = new Command.Return(Command.MoreInput.Line); ;)
                 {
+                    if (token.IsCancellationRequested)
+                    {
+                        command.Ret = ReturnCode.Cancelled;
+                        return command.Ret;
+                    }
                     switch (ret.Code)
                     {
                         case Command.MoreInput.Line:
