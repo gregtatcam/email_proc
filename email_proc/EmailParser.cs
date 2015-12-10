@@ -618,6 +618,57 @@ namespace email_proc
             return;
         }
 
+        public async static Task ParseToResume(CancellationToken token, String addr, String user, String file, StatusCb status, ProgressCb progress)
+        {
+            String index = Path.Combine(Path.GetDirectoryName(file), "email_proc1596.index");
+            FileInfo info = new FileInfo(file);
+            long length = info.Length;
+            FileStream stream = info.OpenRead();
+            status("Generating resume file...");
+            using (StreamReader reader = new StreamReader(stream))
+            {
+                using (StreamWriter writer = new StreamWriter(index))
+                {
+                    await writer.WriteLineAsync(addr + " " + user + " " + file);
+                    String line = "";
+                    String mailbox = "";
+                    String messageid = "";
+                    Regex re_mailbox = new Regex("^X-Mailbox: (.+)$");
+                    Regex re_messageid = new Regex("^Message-ID: ([^ ]+)", RegexOptions.IgnoreCase);
+                    while ((line = await reader.ReadLineAsync()) != null)
+                    {
+                        if (token.IsCancellationRequested)
+                            return;
+                        progress(100.0 * stream.Position / length);
+                        Match m = re_mailbox.Match(line);
+                        if (m.Success)
+                        {
+                            if (mailbox != "")
+                            {
+                                if (messageid != "")
+                                    messageid = " " + messageid;
+                                await writer.WriteLineAsync(mailbox + messageid);
+                            }
+                            mailbox = m.Groups[1].Value;
+                            messageid = "";
+                        }
+                        else if (messageid == "")
+                        {
+                            m = re_messageid.Match(line);
+                            if (m.Success)
+                                messageid = m.Groups[1].Value;
+                        }
+                    }
+                    if (mailbox != "")
+                    {
+                        if (messageid != "")
+                            messageid = " " + messageid;
+                        await writer.WriteLineAsync(mailbox + messageid);
+                    }
+                }
+            }
+        }
+
         public static void TraverseEmail(Email email)
         {
             String headers = email.headers.GetString();
