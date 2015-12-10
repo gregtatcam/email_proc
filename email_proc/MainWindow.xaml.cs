@@ -71,6 +71,9 @@ namespace email_proc
             imapAddr.Add("zoho", "imap.zoho.com");
 
             cbAddr.ItemsSource = imap;
+            cbStatistics.Visibility = Visibility.Hidden;
+            cbDownload.Visibility = Visibility.Hidden;
+            cbResume.Visibility = Visibility.Hidden;
         }
 
         private void MainWindow_Closing(object sender, System.ComponentModel.CancelEventArgs e)
@@ -136,6 +139,17 @@ namespace email_proc
             }
         }
 
+        async Task<bool> Resume(String addr)
+        {
+            if (File.Exists(txtDownload.Text) == false)
+            {
+                System.Windows.Forms.MessageBox.Show("Enter file to resume download");
+                return false;
+            }
+            await EmailParser.ParseToResume(cancelSrc.Token, addr, txtUser.Text, txtDownload.Text, (f,o) => { Status(false, f, o); }, (v) => { prBar.Value = v; });
+            return (cancelSrc.Token.IsCancellationRequested == false);
+        }
+
         private async void btnStart_Click(object sender, RoutedEventArgs e)
         {
             if ((String)btnStart.Content == "Cancel")
@@ -145,6 +159,7 @@ namespace email_proc
                 btnBrowse.IsEnabled = true;
                 return;
             }
+
             StreamWriter filew = null;
             StreamWriter indexw = null;
             String file = null;
@@ -161,7 +176,16 @@ namespace email_proc
                     String addr = cbAddr.Text;
                     if (imapAddr.ContainsKey(addr))
                         addr = imapAddr[addr];
+
                     dir = txtDownload.Text;
+
+                    if (cbResume.IsChecked == true)
+                    {
+                        if (await Resume(addr) == false)
+                            return;
+                        dir = Path.GetDirectoryName(dir);
+                    }
+
                     sb.AppendFormat(@"{0}\arch{1}.mbox", dir, DateTime.Now.ToFileTime());
                     file = sb.ToString();
                     String indexFile = Path.Combine(dir, "email_proc1596.index");
@@ -176,7 +200,10 @@ namespace email_proc
                             {
                                 Match m = Regex.Match(line, "^([^ ]+) ([^ ]+) (.+)$");
                                 if (m.Success && m.Groups[1].Value == addr && m.Groups[2].Value == txtUser.Text)
+                                {
                                     downloadedFile = m.Groups[3].Value;
+                                    file = downloadedFile;
+                                }
                             }
                         }
                     }
@@ -261,7 +288,7 @@ namespace email_proc
 
         private void btnBrowse_Click(object sender, RoutedEventArgs e)
         {
-            if ((bool)cbDownload.IsChecked == true)
+            if (cbDownload.IsChecked == true && cbResume.IsChecked == false)
             {
                 FolderBrowserDialog dlg = new FolderBrowserDialog();
                 if (dlg.ShowDialog() == System.Windows.Forms.DialogResult.OK)
@@ -299,6 +326,7 @@ namespace email_proc
         {
             SetControls(false);
             cbStatistics.IsChecked = true;
+            cbResume.IsChecked = false;
         }
 
         private void cbStatistics_Unchecked(object sender, RoutedEventArgs e)
@@ -318,9 +346,16 @@ namespace email_proc
             {
                 cbDownload.Visibility = Visibility.Visible;
                 cbStatistics.Visibility = Visibility.Visible;
+                cbResume.Visibility = Visibility.Visible;
             }
             lastDebug = e.Key;
             now = DateTime.Now;
+        }
+
+        private void cbResume_Checked(object sender, RoutedEventArgs e)
+        {
+            cbDownload.IsChecked = true;
+            SetControls(true);
         }
     }
 }
