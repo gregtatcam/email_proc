@@ -67,15 +67,11 @@ namespace email_proc
         Dictionary<String, String> messageid;
         int messagesInAccount { get; set; }
         CancellationToken token { get; set; }
+        public List<Mailbox> mailboxes { get; private set; }
         public StateMachine(CancellationToken token, String host, int port, String user, String pswd, String dldFile)
         {
-            Regex rx = new Regex("^[ ]*([^ \t@]+)(@.+)?$");
-            Match m = rx.Match(user);
-            if (m.Success)
-                this.user = m.Groups[1].Value;
-            else
-                this.user = user.Trim(' ');
-            this.pswd = pswd;
+            this.user = "\"" + user.Trim(' ') + "\"";
+            this.pswd = "\"" + pswd + "\"";
             this.dldFile = dldFile;
             this.host = host;
             this.token = token;
@@ -127,6 +123,7 @@ namespace email_proc
                         }
                         if (downloaded.Count > 0)
                             progress(100);
+                        reader.Close();
                     }
                 } catch (Exception ex) {; }
             }
@@ -216,7 +213,7 @@ namespace email_proc
                 }
                 // get the list of mailboxes
                 status("Fetching mailbox list...");
-                List<Mailbox> mailboxes = await GetMailboxesList(cmd,status,progress);
+                mailboxes = await GetMailboxesList(cmd,status,progress);
                 status("Downloading ...");
                 progress(0);
                 int processed = 0;
@@ -242,6 +239,7 @@ namespace email_proc
                             if (await cmd.Run(new FetchCommand(FetchCommand.Fetch.Body,
                                 async delegate (String message, String msgn)
                                 {
+                                    mailbox.start = int.Parse(msgn);
                                     String msgid = "";
                                     if (host == "imap.gmail.com")
                                     {
@@ -251,7 +249,7 @@ namespace email_proc
                                     progress((100.0 * (processed + int.Parse(msgn))) / messagesInAccount);
                                     await data(mailbox.name, message, msgid, msgn);
                                 }, mailbox.start)) != ReturnCode.Ok)
-                                status("No messages downloaded");
+                                status(token.IsCancellationRequested ? "No messages downloaded" : "Download cancelled");
                         }
                         else
                         {
@@ -260,6 +258,7 @@ namespace email_proc
                             if (await cmd.Run(new FetchCommand(FetchCommand.Fetch.MessageID,
                                 async delegate (String message, String msgn)
                                 {
+                                    mailbox.start = int.Parse(msgn);
                                     String msgid = getMsgId(message);
                                     if (msgid != "" && messageid.ContainsKey(msgid))
                                         return;
@@ -273,7 +272,7 @@ namespace email_proc
                                 })) != ReturnCode.Ok)
                             {
                                 progress(0);
-                                status("No messages downloaded");
+                                status(token.IsCancellationRequested ? "No messages downloaded" : "Download cancelled");
                             }
                             else
                             {
@@ -282,21 +281,25 @@ namespace email_proc
                                 foreach (String n in unique)
                                 {
                                     int num = int.Parse(n);
-                                    await cmd.Run(new FetchCommand(FetchCommand.Fetch.Body,
+                                    if (await cmd.Run(new FetchCommand(FetchCommand.Fetch.Body,
                                         async delegate (String message, String msgn)
                                         {
                                             progress((100.0 * (processed + int.Parse(msgn))) / messagesInAccount);
                                             await data(mailbox.name, message, getMsgId(message), msgn);
-                                        }, num, num));
+                                        }, num, num)) != ReturnCode.Ok)
+                                    {
+                                        break;
+                                    }
                                 }
+                                status(token.IsCancellationRequested ? "No messages downloaded" : "Download cancelled");
                             }
                         }
                     }
                     processed += mailbox.cnt;
+                    mailbox.start = mailbox.cnt;
                 }
                 status("Download complete");
             }
-            catch { }
             finally
             {
                 connect.Close();

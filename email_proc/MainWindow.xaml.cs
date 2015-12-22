@@ -44,7 +44,7 @@ namespace email_proc
         Dictionary<String,String> imapAddr = new Dictionary<string, string>();
         Key lastDebug = Key.System;
         DateTime now = DateTime.Now;
-        CancellationTokenSource cancelSrc = new CancellationTokenSource();
+        CancellationTokenSource cancelSrc = null;
         public MainWindow()
         {
             InitializeComponent();
@@ -126,7 +126,7 @@ namespace email_proc
 
                 await filew.WriteAsync(postmark);
                 await filew.WriteAsync("\r\n");
-                await filew.WriteAsync("X-Mailbox: " + mailbox);
+                await filew.WriteAsync("X-Gmail-Labels: " + mailbox);
                 await filew.WriteAsync("\r\n");
                 await indexw.WriteLineAsync(mailbox + (msgid != "" ? " " + msgid : ""));
             }
@@ -159,7 +159,7 @@ namespace email_proc
                 btnBrowse.IsEnabled = true;
                 return;
             }
-
+            cancelSrc = new CancellationTokenSource();
             StreamWriter filew = null;
             StreamWriter indexw = null;
             String file = null;
@@ -171,6 +171,7 @@ namespace email_proc
                 btnStart.Content = "Cancel";
                 btnBrowse.IsEnabled = false;
                 StringBuilder sb = new StringBuilder();
+                bool dldNotDone = false;
                 if ((bool)cbDownload.IsChecked)
                 {
                     String addr = cbAddr.Text;
@@ -215,7 +216,10 @@ namespace email_proc
                         }
                     }
                     else
+                    {
+                        file = downloadedFile;
                         resume = true;
+                    }
                     filew = new StreamWriter(file, resume);
                     StateMachine sm = new StateMachine(cancelSrc.Token, addr, int.Parse(txtPort.Text), txtUser.Text, txtPassword.Password, file);
                     DateTime start_time = DateTime.Now;
@@ -232,21 +236,36 @@ namespace email_proc
                         },
                         delegate (double progress) { prBar.Value = progress; }
                     );
+                    if (indexw != null)
+                        indexw.Close();
+                    indexw = null;
+                    if (filew != null)
+                        filew.Close();
+                    filew = null;
+                    if (cancelSrc.Token.IsCancellationRequested)
+                        return;
                     Status(false, "Downloaded email to {0}", file);
                     TimeSpan span = DateTime.Now - start_time;
                     Status(false, "Download time {0} seconds", span.TotalSeconds);
-                    filew.Close();
-                    filew = null;
-                    indexw.Close();
-                    indexw = null;
-                    File.Delete(indexFile);
+                    foreach(Mailbox mailbox in sm.mailboxes)
+                    {
+                        if (mailbox.cnt != mailbox.start)
+                        {
+                            dldNotDone = true;
+                            break;
+                        }
+                    }
+                    if (dldNotDone)
+                        Status(false, "Download is not complete");
+                    else
+                        File.Delete(indexFile);
                 }
                 else
                 {
                     file = txtDownload.Text;
                     dir = Path.GetDirectoryName(txtDownload.Text);
                 }
-                if ((bool)cbStatistics.IsChecked && !cancelSrc.Token.IsCancellationRequested)
+                if (dldNotDone == false && (bool)cbStatistics.IsChecked && !cancelSrc.Token.IsCancellationRequested)
                 {
                     EmailStats stats = new EmailStats(cancelSrc.Token);
                     await stats.Start(dir, file, Status, delegate(double progress) { prBar.Value = progress; });

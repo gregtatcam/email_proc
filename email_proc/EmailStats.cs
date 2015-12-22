@@ -29,12 +29,8 @@ namespace email_proc
     {
         public delegate void StatusCb(bool cr, string format, params object[] args);
         public delegate void ProgressCb(double progress);
-        Dictionary<String, int> emailAddr { get; set; }
-        Dictionary<String, int> attachments { get; set; }
         Dictionary<String, int> mailboxes { get; set; }
-        Dictionary<String, int> subject { get; set; }
-        Dictionary<String, int> messageid { get; set; }
-        Dictionary<String, int> inreplyto { get; set; }
+        Dictionary<String, String> messageid { get; set; }
         CancellationToken token { get; set; }
 
         void InitMailboxes()
@@ -57,12 +53,8 @@ namespace email_proc
         }
         public EmailStats(CancellationToken token)
         {
-            emailAddr = new Dictionary<string, int>();
-            attachments = new Dictionary<string, int>();
             mailboxes = new Dictionary<string, int>();
-            subject = new Dictionary<string, int>();
-            messageid = new Dictionary<string, int>();
-            inreplyto = new Dictionary<string, int>();
+            messageid = new Dictionary<string, String>();
             this.token = token;
             InitMailboxes();
         }
@@ -76,29 +68,79 @@ namespace email_proc
             return String.Format("{0}", dict[key]);
         }
 
+        String GetMessageId(String key)
+        {
+            if (key == "")
+                return "";
+            if (messageid.ContainsKey(key))
+                return messageid[key];
+            String sha = Sha1(key);
+            messageid[key] = sha;
+            return sha;
+        }
+
+        String GetSubject(String subject)
+        {
+            if (subject == "")
+                return "";
+            Regex re = new Regex("^[ ]*(re|fw|fwd): (.*)$", RegexOptions.IgnoreCase);
+            Match m = re.Match(subject);
+            if (m.Success)
+            {
+                subject = m.Groups[2].Value;
+                return ("re/fw: " + Sha1(subject));
+            }
+            return Sha1(subject);
+        }
+
         String GetInReplyTo(String str)
         {
+            if (str == "")
+                return str;
             String[] ids = Regex.Split(str, "[ \r\n]");
             StringBuilder sb = new StringBuilder();
+            String sha1 = "";
             foreach (String msgid in ids)
             {
-                if (messageid.ContainsKey(msgid) == false)
-                    inreplyto[msgid] = 0;
-                String u = GetUnique(messageid, msgid);
-                if (sb.Length == 0)
-                    sb.Append(u);
+                if (messageid.ContainsKey(msgid))
+                    sha1 = messageid[msgid];
                 else
-                    sb.AppendFormat(",{0}", u);
+                    sha1 = Sha1(msgid);
+                if (sb.Length == 0)
+                    sb.Append(sha1);
+                else
+                    sb.AppendFormat(",{0}", sha1);
             }
             return sb.ToString();
         }
 
+        String GetMailbox(String mailbox)
+        {
+            mailbox = mailbox.ToLower().Trim('\"');
+            string[] parts = Regex.Split(mailbox, "/");
+            StringBuilder sb = new StringBuilder();
+            foreach (string part in parts)
+            {
+                if (sb.Length == 0)
+                    sb.Append(GetUnique(mailboxes, part));
+                else
+                    sb.AppendFormat("/{0}", GetUnique(mailboxes, part));
+            }
+            return sb.ToString();
+        }
+
+        String EmailAddr(String addr)
+        {
+            Regex re = new Regex("([^ <@:[]+@[^] :<>\"\r\n]+)");
+            Match m = re.Match(addr);
+            if (m.Success)
+                return m.Groups[1].Value;
+            return addr;
+        }
+
         bool MessageidUnique(String msgid)
         {
-            bool res = msgid == "" || messageid.ContainsKey(msgid) == false || inreplyto.ContainsKey(msgid);
-            if (inreplyto.ContainsKey(msgid))
-                inreplyto.Remove(msgid);
-            return res;
+            return msgid == "" || messageid.ContainsKey(msgid) == false;
         }
 
         Task WriteStatsLine(StreamWriter writer, String format, params object [] args)
@@ -119,10 +161,18 @@ namespace email_proc
             return (int)deflated.Length;
         }
 
-        async Task<String> Sha1(byte[] buff)
+        String Sha1(byte[] buff)
         {
             HashAlgorithm sha1 = SHA1.Create();
-            return await Task.Run<String>(() => { return Convert.ToBase64String(sha1.ComputeHash(buff)); });
+            String sha = Convert.ToBase64String(sha1.ComputeHash(buff));
+            return (Regex.Replace(sha, "/", "o057"));
+        }
+
+        String Sha1(String buff)
+        {
+            if (buff == "")
+                return "";
+            return Sha1(Encoding.ASCII.GetBytes(buff));
         }
 
         async Task TraverseEmail(StreamWriter filew, int id, int part, Email email)
@@ -139,9 +189,8 @@ namespace email_proc
                     {
                         byte[] buff = email.content.GetBytes();
                         csize = await CompressedSize(buff);
-                        String sha1 = await Sha1(buff);
-                        await WriteStatsLine(filew, "attachment: {0} {1} {2}", GetUnique(attachments, sha1), 
-                            email.content.size, csize);
+                        String sha1 = Sha1(buff);
+                        await WriteStatsLine(filew, "attachment: {0} {1} {2}", sha1, email.content.size, csize);
                     }
                     else
                     {
@@ -188,8 +237,8 @@ namespace email_proc
                         pcb(pct);
                         // get required headers
                         Dictionary<String, String> headers = message.email.headers.GetDictionary(new Dictionary<string, string>()
-                        { {"from","" }, { "cc", "" }, {"subject","" }, {"x-mailbox","" }, {"date","" },
-                        { "to",""}, { "in-reply-to","" }, {"content-type","" }, {"message-id","" } });
+                        { {"from","" }, { "cc", "" }, {"subject","" }, {"date","" },
+                        { "to",""}, { "in-reply-to","" }, {"content-type","" }, {"message-id","" }, { "x-gmail-labels",""}});
                         String msgid = headers["message-id"];
                         // get unique messages
                         if (msgid != null && msgid != "" && MessageidUnique(msgid) == false)
@@ -198,13 +247,13 @@ namespace email_proc
                         int csize = await CompressedSize(message.GetBytes());
                         await WriteStatsLine(filew, "Full Message: {0} {1}", message.size, csize);
                         await WriteStatsLine(filew, "Hdrs");
-                        await WriteStatsLine(filew, "from: {0}", GetUnique(emailAddr, headers["from"]));
-                        await WriteStatsLine(filew, "to: {0}", GetUnique(emailAddr, headers["to"]));
-                        await WriteStatsLine(filew, "cc: {0}", GetUnique(emailAddr, headers["cc"]));
+                        await WriteStatsLine(filew, "from: {0}", Sha1(EmailAddr(headers["from"])));
+                        await WriteStatsLine(filew, "to: {0}", Sha1(EmailAddr(headers["to"])));
+                        await WriteStatsLine(filew, "cc: {0}", Sha1(EmailAddr(headers["cc"])));
                         await WriteStatsLine(filew, "date: {0}", headers["date"]);
-                        await WriteStatsLine(filew, "subject: {0}", GetUnique(subject, headers["subject"]));
-                        await WriteStatsLine(filew, "mailbox: {0}", GetUnique(mailboxes, headers["x-mailbox"].ToLower()));
-                        await WriteStatsLine(filew, "messageid: {0}", GetUnique(messageid, headers["message-id"]));
+                        await WriteStatsLine(filew, "subject: {0}", GetSubject(headers["subject"]));
+                        await WriteStatsLine(filew, "mailbox: {0}", GetMailbox(headers["x-gmail-labels"]));
+                        await WriteStatsLine(filew, "messageid: {0}", GetMessageId(headers["message-id"]));
                         await WriteStatsLine(filew, "inreplyto: {0}", GetInReplyTo(headers["in-reply-to"]));
                         await WriteStatsLine(filew, "Parts");
                         await TraverseEmail(filew, 0, 0, message.email);
