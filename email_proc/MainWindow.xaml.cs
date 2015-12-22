@@ -65,7 +65,7 @@ namespace email_proc
             imapAddr.Add("optimum", "mail.optimum.net");
             imapAddr.Add("outlook", "imap-mail.outlook.com");
             imapAddr.Add("rambler", "imap.rambler.ru");
-            imapAddr.Add("yahoo", "imap.mail.me.com");
+            imapAddr.Add("yahoo", "imap.mail.yahoo.com");
             imapAddr.Add("yandex", "imap.yandex.com");
             imapAddr.Add("yeah", "imap.yeah.net");
             imapAddr.Add("zoho", "imap.zoho.com");
