@@ -373,9 +373,8 @@ namespace email_proc
                     }
                 }
             }
-            catch (Exception)
+            finally
             {
-                return ReturnCode.Failed;
             }
         }
     }
