@@ -45,6 +45,7 @@ namespace email_proc
         Key lastDebug = Key.System;
         DateTime now = DateTime.Now;
         CancellationTokenSource cancelSrc = null;
+        int tabCtrlSelected = 0;
         public MainWindow()
         {
             InitializeComponent();
@@ -70,10 +71,22 @@ namespace email_proc
             imapAddr.Add("yeah", "imap.yeah.net");
             imapAddr.Add("zoho", "imap.zoho.com");
 
+            txtDownload.Text = Path.Combine("C:\\", Environment.UserName, "Downloads");
+
             cbAddr.ItemsSource = imap;
             cbStatistics.Visibility = Visibility.Hidden;
             cbDownload.Visibility = Visibility.Hidden;
             cbResume.Visibility = Visibility.Hidden;
+
+            OtherControls(Visibility.Hidden);
+        }
+
+        void OtherControls(Visibility other)
+        {
+            lblOtherImap.Visibility = other;
+            lblOtherPort.Visibility = other;
+            txtOtherImap.Visibility = other;
+            txtOtherPort.Visibility = other;
         }
 
         private void MainWindow_Closing(object sender, System.ComponentModel.CancelEventArgs e)
@@ -366,6 +379,7 @@ namespace email_proc
                 cbDownload.Visibility = Visibility.Visible;
                 cbStatistics.Visibility = Visibility.Visible;
                 cbResume.Visibility = Visibility.Visible;
+                txtDownload.Text = "";
             }
             lastDebug = e.Key;
             now = DateTime.Now;
@@ -375,6 +389,100 @@ namespace email_proc
         {
             cbDownload.IsChecked = true;
             SetControls(true);
+        }
+
+        Dictionary<System.Windows.Controls.RadioButton,String> Providers()
+        {
+            return new Dictionary<System.Windows.Controls.RadioButton, string>()
+                { { rb163, "163" }, {rbAol,"aol" }, {rbATT,"att" }, {rbComcast,"comcast" }, {rbCox, "cox" }, {rbGmail,"gmail"},
+                  {rbGmx, "gmx" }, {rbHermes,"hermes" }, {rbiCloud, "iCloud" }, {rbInbox,"inbox" }, {rbMail,"mail" },
+                  {rbOutlook, "outlook" }, {rbRambler,"rambler" }, {rbYahoo,"yahoo" }, {rbYandex,"yander" }, {rbYeah,"yeah" },
+                  {rbZoho, "zoho" } };
+        }
+
+        private void SelectProvider()
+        {
+            if (rbOther.IsChecked == true)
+            {
+                cbAddr.Text = txtOtherImap.Text;
+                txtPort.Text = txtOtherPort.Text;
+                return;
+            }
+            Dictionary<System.Windows.Controls.RadioButton, String> providers = Providers();
+            foreach (System.Windows.Controls.RadioButton rb in providers.Keys)
+            {
+                if (rb.IsChecked == true)
+                {
+                    cbAddr.SelectedValue = providers[rb];
+                    txtPort.Text = "993";
+                    break;
+                }
+            }
+        }
+
+        private void btnNextAcct_Click(object sender, RoutedEventArgs e)
+        {
+            tabControl.SelectedIndex = 1;
+        }
+
+        void SelectAccount()
+        {
+            txtUser.Text = txtUserAcct.Text;
+            txtPassword.Password = txtPasswordAcct.Password;
+        }
+
+        private void btnNextAdv_Click(object sender, RoutedEventArgs e)
+        {
+            tabControl.SelectedIndex = 2;
+        }
+
+        private void rbOther_Checked(object sender, RoutedEventArgs e)
+        {
+            OtherControls(Visibility.Visible);
+        }
+
+        private void rbOther_Unchecked(object sender, RoutedEventArgs e)
+        {
+            OtherControls(Visibility.Hidden);
+        }
+
+        private void tabControl_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+        {
+            if (tabCtrlSelected == 2)
+            {
+                String addr = (string)cbAddr.Text;
+                Dictionary<System.Windows.Controls.RadioButton, String> providers = Providers();
+                bool found = false;
+                if (addr != null && addr != "")
+                {
+                    foreach (System.Windows.Controls.RadioButton provider in providers.Keys)
+                    {
+                        if (providers[provider] == addr)
+                        {
+                            provider.IsChecked = true;
+                            found = true;
+                            OtherControls(Visibility.Hidden);
+                            break;
+                        }
+                    }
+                    if (found == false)
+                    {
+                        rbOther.IsChecked = true;
+                        OtherControls(Visibility.Visible);
+                        txtOtherImap.Text = addr;
+                        txtOtherPort.Text = txtPort.Text;
+                    }
+                }
+
+                txtUserAcct.Text = txtUser.Text;
+                txtPasswordAcct.Password = txtPassword.Password;
+            }
+            else
+            {
+                SelectAccount();
+                SelectProvider();
+            }
+            tabCtrlSelected = tabControl.SelectedIndex;
         }
     }
 }
