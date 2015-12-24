@@ -24,6 +24,11 @@ using System.IO.Compression;
 
 namespace email_proc
 {
+    public class CancelException : Exception
+    {
+        public CancelException() : base() { }
+    }
+
     public enum ReturnCode { Ok, No, Bad, Failed, Cancelled }
 
     public abstract class Command
@@ -339,8 +344,21 @@ namespace email_proc
             await writer.FlushAsync();
         }
 
+        public async Task<T> WithTimeout<T>(Task<T> task, int msec)
+        {
+            if (await Task.WhenAny(task, Task.Delay(msec, token)) == task)
+            {
+                return task.Result;
+            }
+            else if (token.IsCancellationRequested)
+                throw new CancelException();
+            else
+                throw new TimeoutException("Network read timeout");
+        }
+
         public async Task<ReturnCode> Run(Command command)
         {
+            int timeout = 5 * 60 * 1000;//msec(5 min)
             try
             {
                 if (command.Cmd != "")
@@ -356,7 +374,7 @@ namespace email_proc
                     switch (ret.Code)
                     {
                         case Command.MoreInput.Line:
-                            String str = await reader.ReadLineAsync();
+                            String str = await WithTimeout(reader.ReadLineAsync(), timeout);
                             ret = await command.Parse(Command.InputType.Line, str);
                             break;
                         case Command.MoreInput.Chunk:
@@ -364,7 +382,7 @@ namespace email_proc
                             char[] buff = new char[count];
                             for (int offset = 0, read = 0; count != 0; offset += read, count -= read)
                             {
-                                read = await reader.ReadBlockAsync(buff, offset, count);
+                                read = await WithTimeout(reader.ReadBlockAsync(buff, offset, count), timeout);
                             }
                             ret = await command.Parse(Command.InputType.Chunk, new String(buff));
                             break;

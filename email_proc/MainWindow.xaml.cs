@@ -71,7 +71,7 @@ namespace email_proc
             imapAddr.Add("yeah", "imap.yeah.net");
             imapAddr.Add("zoho", "imap.zoho.com");
 
-            txtDownload.Text = Path.Combine("C:\\", Environment.UserName, "Downloads");
+            txtDownload.Text = Path.Combine("C:\\Users", Environment.UserName, "Downloads");
 
             cbAddr.ItemsSource = imap;
             cbStatistics.Visibility = Visibility.Hidden;
@@ -256,7 +256,10 @@ namespace email_proc
                         filew.Close();
                     filew = null;
                     if (cancelSrc.Token.IsCancellationRequested)
+                    {
+                        Status(false, "Cancelled");
                         return;
+                    }
                     Status(false, "Downloaded email to {0}", file);
                     TimeSpan span = DateTime.Now - start_time;
                     Status(false, "Download time {0} seconds", span.TotalSeconds);
@@ -284,6 +287,8 @@ namespace email_proc
                     await stats.Start(dir, file, Status, delegate(double progress) { prBar.Value = progress; });
                     prBar.Value = 100;
                 }
+                if (cancelSrc.Token.IsCancellationRequested)
+                    Status(false, "Cancelled");
             }
             catch (FailedLoginException)
             {
@@ -300,6 +305,10 @@ namespace email_proc
             catch (ValidationException ex)
             {
                 Status(false, ex.reason);
+            }
+            catch (CancelException)
+            {
+                Status(false, "Cancelled");
             }
             catch (Exception ex)
             {
