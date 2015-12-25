@@ -138,8 +138,6 @@ namespace email_proc
         }
         async Task<List<Mailbox>> GetMailboxesList(ImapCmd cmd, StatusCb status, ProgressCb progress)
         {
-            // get the list of mailboxes
-            status("Fetching mailbox list...");
             List<Mailbox> mailboxes = new List<Mailbox>();
             if (await cmd.Run(new ListCommand(async delegate (String mailbox, String ctx)
             { await Task.Yield(); mailboxes.Add(new Mailbox(mailbox)); })) != ReturnCode.Ok)

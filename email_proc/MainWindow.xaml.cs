@@ -172,6 +172,18 @@ namespace email_proc
                 btnBrowse.IsEnabled = true;
                 return;
             }
+            await Start(1);
+        }
+
+        private async Task Start(int attempts)
+        {
+            if (attempts > 20)
+            {
+                Status(false, "Stopped, too many retry attempts");
+                return;
+            }
+            else if (attempts > 1)
+                Status(false, "Retrying...");
             cancelSrc = new CancellationTokenSource();
             StreamWriter filew = null;
             StreamWriter indexw = null;
@@ -179,8 +191,11 @@ namespace email_proc
             String dir = null;
             try {
                 Validate();
-                lbStatus.Items.Clear();
-                lbStatus.Items.Refresh();
+                if (attempts == 1)
+                {
+                    lbStatus.Items.Clear();
+                    lbStatus.Items.Refresh();
+                }
                 btnStart.Content = "Cancel";
                 btnBrowse.IsEnabled = false;
                 StringBuilder sb = new StringBuilder();
@@ -236,25 +251,43 @@ namespace email_proc
                     filew = new StreamWriter(file, resume);
                     StateMachine sm = new StateMachine(cancelSrc.Token, addr, int.Parse(txtPort.Text), txtUser.Text, txtPassword.Password, file);
                     DateTime start_time = DateTime.Now;
-                    await sm.Start(
-                        delegate (String format, object[] args)
-                        {
-                            Status(false, format, args);
-                        },
-                        async delegate (String mailbox, String message, String msgid, String msgnum) 
-                        {
-                            if (indexw == null)
-                                indexw = new StreamWriter(indexFile, true);
-                            await SaveMessage(filew, indexw, mailbox, message, msgid, msgnum);
-                        },
-                        delegate (double progress) { prBar.Value = progress; }
-                    );
-                    if (indexw != null)
-                        indexw.Close();
-                    indexw = null;
-                    if (filew != null)
-                        filew.Close();
-                    filew = null;
+                    try
+                    {
+                        await sm.Start(
+                            delegate (String format, object[] args)
+                            {
+                                Status(false, format, args);
+                            },
+                            async delegate (String mailbox, String message, String msgid, String msgnum)
+                            {
+                                if (indexw == null)
+                                    indexw = new StreamWriter(indexFile, true);
+                                await SaveMessage(filew, indexw, mailbox, message, msgid, msgnum);
+                            },
+                            delegate (double progress) { prBar.Value = progress; }
+                        );
+                    }
+                    catch (ServerIOException ex)
+                    {
+                        Status(false, ex.Message);
+                    }
+                    catch (TimeoutException ex)
+                    {
+                        Status(false, ex.Message);
+                    }
+                    catch (FailedException)
+                    {
+                        Status(false, "Failed to download");
+                    }
+                    finally
+                    {
+                        if (indexw != null)
+                            indexw.Close();
+                        indexw = null;
+                        if (filew != null)
+                            filew.Close();
+                        filew = null;
+                    }
                     if (cancelSrc.Token.IsCancellationRequested)
                     {
                         Status(false, "Cancelled");
@@ -272,7 +305,10 @@ namespace email_proc
                         }
                     }
                     if (dldNotDone)
+                    {
                         Status(false, "Download is not complete");
+                        await Start(attempts + 1);
+                    }
                     else
                         File.Delete(indexFile);
                 }
@@ -312,7 +348,7 @@ namespace email_proc
             }
             catch (Exception ex)
             {
-                Status(false, ex.Message);
+                Status(false, ex.Message + " " + ex.StackTrace);
             }
             finally
             {

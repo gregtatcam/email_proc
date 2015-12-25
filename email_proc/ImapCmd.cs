@@ -29,6 +29,11 @@ namespace email_proc
         public CancelException() : base() { }
     }
 
+    public class ServerIOException : Exception
+    {
+        public ServerIOException(String msg) : base(msg) { }
+    }
+
     public enum ReturnCode { Ok, No, Bad, Failed, Cancelled }
 
     public abstract class Command
@@ -348,7 +353,10 @@ namespace email_proc
         {
             if (await Task.WhenAny(task, Task.Delay(msec, token)) == task)
             {
-                return task.Result;
+                if (task.IsCompleted)
+                    return task.Result;
+                else
+                    throw new ServerIOException("Server closed connection");
             }
             else if (token.IsCancellationRequested)
                 throw new CancelException();
@@ -375,6 +383,8 @@ namespace email_proc
                     {
                         case Command.MoreInput.Line:
                             String str = await WithTimeout(reader.ReadLineAsync(), timeout);
+                            if (str == null)
+                                throw new ServerIOException("Server closed connection");
                             ret = await command.Parse(Command.InputType.Line, str);
                             break;
                         case Command.MoreInput.Chunk:
@@ -383,6 +393,8 @@ namespace email_proc
                             for (int offset = 0, read = 0; count != 0; offset += read, count -= read)
                             {
                                 read = await WithTimeout(reader.ReadBlockAsync(buff, offset, count), timeout);
+                                if (read == 0)
+                                    throw new ServerIOException("Server closed connection");
                             }
                             ret = await command.Parse(Command.InputType.Chunk, new String(buff));
                             break;
