@@ -61,7 +61,7 @@
                     <Label x:Name="label1" Content="IMAP server port(leave 993 if not sure):" HorizontalAlignment="Left" Margin="25,58,0,0" VerticalAlignment="Top" Height="26"/>
                     <TextBox x:Name="txtPort" HorizontalAlignment="Left" Height="23" Margin="296,58,0,0" TextWrapping="Wrap" Text="993" VerticalAlignment="Top" Width="42" TabIndex="1"/>
                     <ComboBox x:Name="cbAddr" HorizontalAlignment="Left" Margin="296,27,-125,0" VerticalAlignment="Top" Width="197" IsEditable="True" TabIndex="0" ToolTip="Click on the right down arrow to expand the list"/>
-                    <Label x:Name="lblDownload" Content="Choose directory where generated files are saved:" HorizontalAlignment="Left" Margin="25,164,0,-58" VerticalAlignment="Top" Height="26" ToolTip="Directory where downloaded email and generated statistics will be saved"/>
+                    <Label x:Name="lblDownload" Content="Choose directory where generated files are saved:" HorizontalAlignment="Left" Margin="25,152,0,0" VerticalAlignment="Top" Height="26" ToolTip="Directory where downloaded email and generated statistics will be saved"/>
                     <Label x:Name="label3" Content="Email account name:" HorizontalAlignment="Left" Margin="25,89,0,0" VerticalAlignment="Top" Height="26"/>
                     <TextBox x:Name="txtUser" HorizontalAlignment="Left" Height="23" Margin="296,89,-125,0" TextWrapping="Wrap" Text="" VerticalAlignment="Top" Width="197" TabIndex="2"/>
                     <Label x:Name="label4" Content="Email account password:" HorizontalAlignment="Left" Margin="25,123,0,-17" VerticalAlignment="Top"/>
@@ -74,6 +74,7 @@
                     <Label x:Name="label2" Content="Select Your Email Provider or enter" HorizontalAlignment="Left" Margin="25,9,0,0" VerticalAlignment="Top" ToolTip="Click on the right down arrow to expand the list"/>
                     <CheckBox x:Name="cbResume" Content="Resume" IsChecked="False" HorizontalAlignment="Left" Margin="205,192,0,-76" VerticalAlignment="Top" Checked="cbResume_Checked"/>
                     <Button x:Name="btnStart" Content="Start" HorizontalAlignment="Left" Margin="223,213,0,0" VerticalAlignment="Top" Width="75" Click="btnStart_Click"/>
+                    <Label x:Name="label6" Content="Or leave the provided default value:" HorizontalAlignment="Left" Margin="25,169,0,0" VerticalAlignment="Top"/>
                 </Grid>
             </TabItem>
         </TabControl>
