@@ -279,6 +279,10 @@ namespace email_proc
                     {
                         Status(false, "Failed to download");
                     }
+                    catch (ConnectionFailedException ex)
+                    {
+                        Status(false, ex.Message);
+                    }
                     finally
                     {
                         if (indexw != null)
@@ -293,20 +297,26 @@ namespace email_proc
                         Status(false, "Cancelled");
                         return;
                     }
-                    Status(false, "Downloaded email to {0}", file);
-                    TimeSpan span = DateTime.Now - start_time;
-                    Status(false, "Download time {0} seconds", span.TotalSeconds);
-                    foreach(Mailbox mailbox in sm.mailboxes)
+                    if (sm.mailboxes != null)
                     {
-                        if (mailbox.cnt != mailbox.start)
+                        Status(false, "Downloaded email to {0}", file);
+                        TimeSpan span = DateTime.Now - start_time;
+                        Status(false, "Download time {0} seconds", span.TotalSeconds);
+                        foreach (Mailbox mailbox in sm.mailboxes)
                         {
-                            dldNotDone = true;
-                            break;
+                            if (mailbox.cnt != mailbox.start)
+                            {
+                                dldNotDone = true;
+                                break;
+                            }
                         }
                     }
+                    else
+                        dldNotDone = true;
                     if (dldNotDone)
                     {
-                        Status(false, "Download is not complete");
+                        Status(false, "Download is not complete, retrying...");
+                        Thread.Sleep(5000);
                         await Start(attempts + 1);
                     }
                     else
