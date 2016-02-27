@@ -63,11 +63,9 @@ namespace email_proc
     }
 
     class ParsingFailedException : Exception
-    { 
-        public String reason { get; private set; } 
-        public ParsingFailedException(String message)
+    {
+        public ParsingFailedException(String message) : base(message)
         {
-            reason = message;
         }
     }
     class AlreadyExistsException : Exception
@@ -77,7 +75,7 @@ namespace email_proc
 
     public class Boundary
     {
-        static Regex re_boundary = new Regex("boundary=((\"[^\"]+\")|([^ ]+))");
+        static Regex re_boundary = new Regex("boundary=((\"[^\"]+\")|([^ ]+))", RegexOptions.IgnoreCase);
         String boundary { get; set; }
         public String openBoundary { get; private set; }
         public String closeBoundary { get; private set; }
@@ -534,32 +532,25 @@ namespace email_proc
         */
         public async Task<ParseResult> Parse(MessageReader reader)
         {
-            try
-            {
-                postmark = new Postmark(entity);
-                if ((await postmark.Parse(reader)) == ParseResult.Failed)
-                    throw new ParsingFailedException("postmark is not found");
-                email = new Email(entity);
-                ParseResult res = await email.Parse(reader);
-                if (res == ParseResult.Failed)
-                    throw new ParsingFailedException("email doesn't conform to rfc822");
-                if (res != ParseResult.Eof)
-                    await ConsumeToEnd(reader);
-                SetSize();
-   
-                return res;
-            }
-            catch (Exception ex)
-            {
-                throw new ParsingFailedException(ex.Message);
-            }
+            postmark = new Postmark(entity);
+            if ((await postmark.Parse(reader)) == ParseResult.Failed)
+                throw new ParsingFailedException("postmark is not found");
+            email = new Email(entity);
+            ParseResult res = await email.Parse(reader);
+            if (res == ParseResult.Failed)
+                throw new ParsingFailedException("email doesn't conform to rfc822");
+            if (res != ParseResult.Eof)
+                await ConsumeToEnd(reader);
+            SetSize();
+
+            return res;
         }
     }
 
     public class EmailParser
     {
         public delegate void TraverseCb(Email email);
-        public delegate Task MessageCb(Message message);
+        public delegate Task MessageCb(Message message, Exception ex=null);
         // From 1487928187900928398@xxx Fri Dec 19 02:21:37 2014
         public static String PostmarkReStr = "^(from [^ \r\n]+ (mon|tue|wed|thu|fri|sat|sun) (jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec))[^\r\n]+";
         // From: John Smith <john.smith@provider.com>
@@ -611,9 +602,16 @@ namespace email_proc
             {
                 if (token.IsCancellationRequested)
                     break;
-                Message message = new Message();
-                if (await message.Parse(reader) != ParseResult.Failed)
-                    await cb(message);
+                try
+                {
+                    Message message = new Message();
+                    if (await message.Parse(reader) != ParseResult.Failed)
+                        await cb(message);
+                }
+                catch (Exception ex)
+                {
+                    await cb(null, ex);
+                }
             }
             return;
         }

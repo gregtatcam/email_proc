@@ -125,7 +125,7 @@ namespace email_proc
                             progress(100);
                         reader.Close();
                     }
-                } catch (Exception ex) {; }
+                } catch { }
             }
 
             return downloaded;

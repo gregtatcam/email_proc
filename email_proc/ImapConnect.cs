@@ -50,7 +50,7 @@ namespace email_proc
                 stream = tcpc.GetStream();
                 return ConnectStatus.Ok;
             }
-            catch (Exception ex)
+            catch
             {
                 return ConnectStatus.Failed;
             }
@@ -64,7 +64,7 @@ namespace email_proc
                 stream = ssl;
                 return ConnectStatus.Ok;
             }
-            catch (Exception ex)
+            catch
             {
                 return ConnectStatus.Failed;
             }

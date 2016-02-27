@@ -112,11 +112,11 @@ namespace email_proc
                 throw new ValidationException(error);
         }
 
-        void Status(bool cr, String format, params object[] args)
+        void Status(bool cr, string crcondition, String format, params object[] args)
         {
             StringBuilder sb = new StringBuilder();
             sb.AppendFormat(format, args);
-            if (cr)
+            if (cr && ("" == crcondition || Regex.IsMatch(lbStatus.Items[lbStatus.Items.Count - 1].ToString(), crcondition)))
                 lbStatus.Items[lbStatus.Items.Count - 1] = sb.ToString();
             else
                 lbStatus.Items.Add(sb.ToString());
@@ -159,7 +159,7 @@ namespace email_proc
                 System.Windows.Forms.MessageBox.Show("Enter file to resume download");
                 return false;
             }
-            await EmailParser.ParseToResume(cancelSrc.Token, addr, txtUser.Text, txtDownload.Text, (f,o) => { Status(false, f, o); }, (v) => { prBar.Value = v; });
+            await EmailParser.ParseToResume(cancelSrc.Token, addr, txtUser.Text, txtDownload.Text, (f,o) => { Status(false, "", f, o); }, (v) => { prBar.Value = v; });
             return (cancelSrc.Token.IsCancellationRequested == false);
         }
 
@@ -179,11 +179,11 @@ namespace email_proc
         {
             if (attempts > 20)
             {
-                Status(false, "Stopped, too many retry attempts");
+                Status(false, "", "Stopped, too many retry attempts");
                 return;
             }
             else if (attempts > 1)
-                Status(false, "Retrying...");
+                Status(false, "", "Retrying...");
             cancelSrc = new CancellationTokenSource();
             StreamWriter filew = null;
             StreamWriter indexw = null;
@@ -256,7 +256,7 @@ namespace email_proc
                         await sm.Start(
                             delegate (String format, object[] args)
                             {
-                                Status(false, format, args);
+                                Status(false, "", format, args);
                             },
                             async delegate (String mailbox, String message, String msgid, String msgnum)
                             {
@@ -269,19 +269,19 @@ namespace email_proc
                     }
                     catch (ServerIOException ex)
                     {
-                        Status(false, ex.Message);
+                        Status(false, "", ex.Message);
                     }
                     catch (TimeoutException ex)
                     {
-                        Status(false, ex.Message);
+                        Status(false, "", ex.Message);
                     }
                     catch (FailedException)
                     {
-                        Status(false, "Failed to download");
+                        Status(false, "", "Failed to download");
                     }
                     catch (ConnectionFailedException ex)
                     {
-                        Status(false, ex.Message);
+                        Status(false, "", ex.Message);
                     }
                     finally
                     {
@@ -294,14 +294,14 @@ namespace email_proc
                     }
                     if (cancelSrc.Token.IsCancellationRequested)
                     {
-                        Status(false, "Cancelled");
+                        Status(false, "", "Cancelled");
                         return;
                     }
                     if (sm.mailboxes != null)
                     {
-                        Status(false, "Downloaded email to {0}", file);
+                        Status(false, "", "Downloaded email to {0}", file);
                         TimeSpan span = DateTime.Now - start_time;
-                        Status(false, "Download time {0} seconds", span.TotalSeconds);
+                        Status(false, "", "Download time {0} seconds", span.TotalSeconds);
                         foreach (Mailbox mailbox in sm.mailboxes)
                         {
                             if (mailbox.cnt != mailbox.start)
@@ -315,7 +315,7 @@ namespace email_proc
                         dldNotDone = true;
                     if (dldNotDone)
                     {
-                        Status(false, "Download is not complete, retrying...");
+                        Status(false, "", "Download is not complete, retrying...");
                         Thread.Sleep(5000);
                         await Start(attempts + 1);
                     }
@@ -334,31 +334,31 @@ namespace email_proc
                     prBar.Value = 100;
                 }
                 if (cancelSrc.Token.IsCancellationRequested)
-                    Status(false, "Cancelled");
+                    Status(false, "", "Cancelled");
             }
             catch (FailedLoginException)
             {
-                Status(false, "Login failed, invalid user or password");
+                Status(false, "", "Login failed, invalid user or password");
             }
             catch (FailedException)
             {
-                Status(false, "Failed to download");
+                Status(false, "", "Failed to download");
             }
             catch (SslFailedException)
             {
-                Status(false, "Failed to establish secure connection");
+                Status(false, "", "Failed to establish secure connection");
             }
             catch (ValidationException ex)
             {
-                Status(false, ex.reason);
+                Status(false,"",  ex.reason);
             }
             catch (CancelException)
             {
-                Status(false, "Cancelled");
+                Status(false, "", "Cancelled");
             }
             catch (Exception ex)
             {
-                Status(false, ex.Message + " " + ex.StackTrace);
+                Status(false, "", ex.Message + " " + ex.StackTrace);
             }
             finally
             {

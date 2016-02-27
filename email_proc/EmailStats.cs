@@ -27,7 +27,7 @@ namespace email_proc
 {
     class EmailStats
     {
-        public delegate void StatusCb(bool cr, string format, params object[] args);
+        public delegate void StatusCb(bool cr, string crcondition, string format, params object[] args);
         public delegate void ProgressCb(double progress);
         Dictionary<String, int> mailboxes { get; set; }
         Dictionary<String, String> messageid { get; set; }
@@ -217,7 +217,7 @@ namespace email_proc
         {
             StreamWriter filew = null;
             try {
-                status(false, "Started statistics processing.");
+                status(false, "", "Started statistics processing.");
                 MessageReader reader = new MessageReader(file);
                 long size = reader.BaseStream.Length;
                 double progress = .0;
@@ -228,9 +228,19 @@ namespace email_proc
                 filew = new StreamWriter(file);
                 DateTime start_time = DateTime.Now;
                 await WriteStatsLine(filew, "archive size: {0}\n", size);
-                await EmailParser.ParseMessages(token, reader, async delegate (Message message)
+                int count = 1;
+                await EmailParser.ParseMessages(token, reader, async delegate (Message message, Exception reason)
                 {
-                    try {
+                    status(true, "^message:", "message: {0}", count++);
+                    try
+                    {
+                        if (null == message)
+                        {
+                            status(false, "", "message parsing failed: " + (null != reason ? reason.Message : ""));
+                            await WriteStatsLine(filew, "--> start");
+                            await WriteStatsLine(filew, "<-- end failed to process: {0}", (null != reason) ? reason.Message : "");
+                            return;
+                        }
                         // display progress
                         progress += message.size;
                         double pct = (100.0 * progress / (double)size);
@@ -264,13 +274,13 @@ namespace email_proc
                         await WriteStatsLine(filew, "<-- end failed to process: {0}", ex.Message);
                     }
                 });
-                status(false, "Statistics is generated in file {0}", file);
+                status(false, "", "Statistics is generated in file {0}", file);
                 TimeSpan span = DateTime.Now - start_time;
-                status(false, "Processing time: {0} seconds", span.TotalSeconds);
+                status(false, "", "Processing time: {0} seconds", span.TotalSeconds);
             } 
             catch (Exception ex)
             {
-                status(false, "Statistics failed: {0}", ex.Message);
+                status(false, "", "Statistics failed: {0}", ex.Message);
             }
             finally
             {
