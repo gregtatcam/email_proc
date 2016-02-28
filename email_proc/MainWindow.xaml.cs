@@ -133,7 +133,7 @@ namespace email_proc
                 Match m = re.Match(status);
                 if (m.Success)
                 {
-                    Status(true, "{0} {1}", m.Groups[1].Value, msgnum);
+                    Status(true, "", "{0} {1}", m.Groups[1].Value, msgnum);
                 }
                 String postmark = EmailParser.MakePostmark(message);
 
