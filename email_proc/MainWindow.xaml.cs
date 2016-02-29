@@ -179,7 +179,7 @@ namespace email_proc
         {
             if (attempts > 20)
             {
-                Status(false, "", "Stopped, too many retry attempts");
+                Status(false, "", "Stopped, too many retry attempts. Click on Start to resume the download");
                 return;
             }
             else if (attempts > 1)
