@@ -46,6 +46,7 @@ namespace email_proc
         DateTime now = DateTime.Now;
         CancellationTokenSource cancelSrc = null;
         int tabCtrlSelected = 0;
+        DateTime start_time;
         public MainWindow()
         {
             InitializeComponent();
@@ -172,12 +173,13 @@ namespace email_proc
                 btnBrowse.IsEnabled = true;
                 return;
             }
+            start_time = DateTime.Now;
             await Start(1);
         }
 
         private async Task Start(int attempts)
         {
-            if (attempts > 20)
+            if (attempts > 200)
             {
                 Status(false, "", "Stopped, too many retry attempts. Click on Start to resume the download");
                 return;
@@ -250,7 +252,6 @@ namespace email_proc
                     }
                     filew = new StreamWriter(file, resume);
                     StateMachine sm = new StateMachine(cancelSrc.Token, addr, int.Parse(txtPort.Text), txtUser.Text, txtPassword.Password, file);
-                    DateTime start_time = DateTime.Now;
                     try
                     {
                         await sm.Start(
@@ -283,6 +284,10 @@ namespace email_proc
                     {
                         Status(false, "", ex.Message);
                     }
+                    catch (Exception ex)
+                    {
+                        Status(false, "", ex.Message);
+                    }
                     finally
                     {
                         if (indexw != null)
@@ -300,8 +305,6 @@ namespace email_proc
                     if (sm.mailboxes != null)
                     {
                         Status(false, "", "Downloaded email to {0}", file);
-                        TimeSpan span = DateTime.Now - start_time;
-                        Status(false, "", "Download time {0} seconds", span.TotalSeconds);
                         foreach (Mailbox mailbox in sm.mailboxes)
                         {
                             if (mailbox.cnt != mailbox.start)
@@ -320,7 +323,11 @@ namespace email_proc
                         await Start(attempts + 1);
                     }
                     else
+                    {
+                        TimeSpan span = DateTime.Now - start_time;
+                        Status(false, "", "Download time {0} seconds", span.TotalSeconds);
                         File.Delete(indexFile);
+                    }
                 }
                 else
                 {
