@@ -262,19 +262,19 @@ namespace email_proc
             switch (fetch)
             {
                 case Fetch.Header:
-                    Append("body[header]");
+                    Append("body.peek[header]");
                     break;
                 case Fetch.Body:
-                    Append("body[]");
+                    Append("body.peek[]");
                     break;
                 case Fetch.Text:
-                    Append("body[text]");
+                    Append("body.peek[text]");
                     break;
                 case Fetch.MessageID:
-                    Append("body[header.fields (Message-ID)]");
+                    Append("body.peek[header.fields (Message-ID)]");
                     break;
                 default:
-                    Append("body[]");
+                    Append("body.peek[]");
                     break;
             }
             Append("\r\n");
