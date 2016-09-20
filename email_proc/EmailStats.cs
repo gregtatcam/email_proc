@@ -248,7 +248,7 @@ namespace email_proc
                         // get required headers
                         Dictionary<String, String> headers = message.email.headers.GetDictionary(new Dictionary<string, string>()
                         { {"from","" }, { "cc", "" }, {"subject","" }, {"date","" },
-                        { "to",""}, { "in-reply-to","" }, {"content-type","" }, {"message-id","" }, { "x-gmail-labels",""}});
+                        { "to",""}, {"bcc", "" }, { "in-reply-to","" }, {"content-type","" }, {"message-id","" }, { "x-gmail-labels",""}});
                         String msgid = headers["message-id"];
                         // get unique messages
                         if (msgid != null && msgid != "" && MessageidUnique(msgid) == false)
@@ -260,6 +260,7 @@ namespace email_proc
                         await WriteStatsLine(filew, "from: {0}", Sha1(EmailAddr(headers["from"])));
                         await WriteStatsLine(filew, "to: {0}", Sha1(EmailAddr(headers["to"])));
                         await WriteStatsLine(filew, "cc: {0}", Sha1(EmailAddr(headers["cc"])));
+                        await WriteStatsLine(filew, "bcc: {0}", Sha1(EmailAddr(headers["bcc"])));
                         await WriteStatsLine(filew, "date: {0}", headers["date"]);
                         await WriteStatsLine(filew, "subject: {0}", GetSubject(headers["subject"]));
                         await WriteStatsLine(filew, "mailbox: {0}", GetMailbox(headers["x-gmail-labels"]));
