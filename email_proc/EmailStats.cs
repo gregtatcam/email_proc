@@ -129,13 +129,25 @@ namespace email_proc
             return sb.ToString();
         }
 
-        String EmailAddr(String addr)
+        String MatchEmail(String re_str, String addr)
         {
-            Regex re = new Regex("([^ <@:[]+@[^] :<>\"\r\n]+)");
+            Regex re = new Regex("<" + re_str + ">");
             Match m = re.Match(addr);
             if (m.Success)
-                return m.Groups[1].Value;
-            return addr;
+                return m.Groups[1].Value.ToLowerInvariant();
+            else
+                return null;
+        }
+
+        String EmailAddr(String addr)
+        {
+            // match the rightmost email address, so in "xxx1@foo.com" <xxx2@foo.com>, xxx2@foo.com is matched
+            String re_str = "([^\'\"\t\r\n <@:[]+@[^]\t :<>\'\"\r\n]+)";
+            String matched = MatchEmail("<" + re_str + ">", addr);
+            if (matched == null && (matched = MatchEmail(re_str, addr)) == null)
+                return addr;
+            else
+                return matched;
         }
 
         bool MessageidUnique(String msgid)
@@ -248,7 +260,7 @@ namespace email_proc
                         // get required headers
                         Dictionary<String, String> headers = message.email.headers.GetDictionary(new Dictionary<string, string>()
                         { {"from","" }, { "cc", "" }, {"subject","" }, {"date","" },
-                        { "to",""}, {"bcc", "" }, { "in-reply-to","" }, {"content-type","" }, {"message-id","" }, { "x-gmail-labels",""}});
+                        { "to",""}, {"bcc", "" }, { "in-reply-to","" }, {"reply-to","" }, {"content-type","" }, {"message-id","" }, { "x-gmail-labels",""}});
                         String msgid = headers["message-id"];
                         // get unique messages
                         if (msgid != null && msgid != "" && MessageidUnique(msgid) == false)
@@ -266,6 +278,7 @@ namespace email_proc
                         await WriteStatsLine(filew, "mailbox: {0}", GetMailbox(headers["x-gmail-labels"]));
                         await WriteStatsLine(filew, "messageid: {0}", GetMessageId(headers["message-id"]));
                         await WriteStatsLine(filew, "inreplyto: {0}", GetInReplyTo(headers["in-reply-to"]));
+                        await WriteStatsLine(filew, "replyto: {0}", Sha1(EmailAddr(headers["reply-to"])));
                         await WriteStatsLine(filew, "Parts");
                         await TraverseEmail(filew, 0, 0, message.email);
                         await WriteStatsLine(filew, "<-- end");
