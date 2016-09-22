@@ -143,8 +143,8 @@ namespace email_proc
         {
             // match the rightmost email address, so in "xxx1@foo.com" <xxx2@foo.com>, xxx2@foo.com is matched
             String re_str = "([^\'\"\t\r\n <@:[]+@[^]\t :<>\'\"\r\n]+)";
-            String matched = MatchEmail("<" + re_str + ">", addr);
-            if (matched == null && (matched = MatchEmail(re_str, addr)) == null)
+            String matched = MatchEmail("<" + re_str + ">[ \t]*$", addr);
+            if (matched == null && (matched = MatchEmail("<" + re_str + ">", addr)) == null && (matched = MatchEmail(re_str, addr)) == null)
                 return addr;
             else
                 return matched;
