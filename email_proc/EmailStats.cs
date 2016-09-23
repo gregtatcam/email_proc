@@ -83,6 +83,7 @@ namespace email_proc
         {
             if (subject == "")
                 return "";
+            subject = subject.Trim();
             Regex re = new Regex("^[ ]*(re|fw|fwd): (.*)$", RegexOptions.IgnoreCase);
             Match m = re.Match(subject);
             if (m.Success)
@@ -159,9 +160,9 @@ namespace email_proc
             String re_str = "([^\'\"\t\r\n <@:[]+@[^]\t :<>\'\"\r\n]+)";
             String matched = MatchEmail("<" + re_str + ">[ \t]*$", addr);
             if (matched == null && (matched = MatchEmail("<" + re_str + ">", addr)) == null && (matched = MatchEmail(re_str, addr)) == null)
-                return addr;
+                return addr.ToLowerInvariant();
             else
-                return matched;
+                return matched.ToLowerInvariant();
         }
 
         bool MessageidUnique(String msgid)
