@@ -139,6 +139,20 @@ namespace email_proc
                 return null;
         }
 
+        String GetAddrList(String str)
+        {
+            String[] addrs = Regex.Split(str, "[,;]");
+            StringBuilder sb = new StringBuilder();
+            foreach(String addr in addrs)
+            {
+                if (sb.ToString() != "")
+                    sb.AppendFormat(",{0}", Sha1(EmailAddr(addr)));
+                else
+                    sb.Append(Sha1(EmailAddr(addr)));
+            }
+            return sb.ToString();
+        }
+
         String EmailAddr(String addr)
         {
             // match the rightmost email address, so in "xxx1@foo.com" <xxx2@foo.com>, xxx2@foo.com is matched
@@ -270,15 +284,15 @@ namespace email_proc
                         await WriteStatsLine(filew, "Full Message: {0} {1}", message.size, csize);
                         await WriteStatsLine(filew, "Hdrs");
                         await WriteStatsLine(filew, "from: {0}", Sha1(EmailAddr(headers["from"])));
-                        await WriteStatsLine(filew, "to: {0}", Sha1(EmailAddr(headers["to"])));
-                        await WriteStatsLine(filew, "cc: {0}", Sha1(EmailAddr(headers["cc"])));
-                        await WriteStatsLine(filew, "bcc: {0}", Sha1(EmailAddr(headers["bcc"])));
+                        await WriteStatsLine(filew, "to: {0}", GetAddrList(headers["to"]));
+                        await WriteStatsLine(filew, "cc: {0}", GetAddrList(headers["cc"]));
+                        await WriteStatsLine(filew, "bcc: {0}", GetAddrList(headers["bcc"]));
                         await WriteStatsLine(filew, "date: {0}", headers["date"]);
                         await WriteStatsLine(filew, "subject: {0}", GetSubject(headers["subject"]));
                         await WriteStatsLine(filew, "mailbox: {0}", GetMailbox(headers["x-gmail-labels"]));
                         await WriteStatsLine(filew, "messageid: {0}", GetMessageId(headers["message-id"]));
                         await WriteStatsLine(filew, "inreplyto: {0}", GetInReplyTo(headers["in-reply-to"]));
-                        await WriteStatsLine(filew, "replyto: {0}", Sha1(EmailAddr(headers["reply-to"])));
+                        await WriteStatsLine(filew, "replyto: {0}", GetAddrList(headers["reply-to"]));
                         await WriteStatsLine(filew, "Parts");
                         await TraverseEmail(filew, 0, 0, message.email);
                         await WriteStatsLine(filew, "<-- end");
