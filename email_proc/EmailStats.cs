@@ -293,7 +293,7 @@ namespace email_proc
                         await WriteStatsLine(filew, "messageid: {0}", GetMessageId(headers["message-id"]));
                         await WriteStatsLine(filew, "inreplyto: {0}", GetInReplyTo(headers["in-reply-to"]));
                         await WriteStatsLine(filew, "replyto: {0}", GetAddrList(headers["reply-to"]));
-                        await WriteStatsLine(filew, "Parts");
+                        await WriteStatsLine(filew, "Parts:");
                         await TraverseEmail(filew, 0, 0, message.email);
                         await WriteStatsLine(filew, "<-- end");
                     }
