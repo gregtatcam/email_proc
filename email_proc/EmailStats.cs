@@ -83,8 +83,7 @@ namespace email_proc
         {
             if (subject == "")
                 return "";
-            subject = subject.Trim();
-            Regex re = new Regex("^[ ]*(re|fw|fwd): (.*)$", RegexOptions.IgnoreCase);
+            Regex re = new Regex("(re|fw|fwd): (.*)$", RegexOptions.IgnoreCase);
             Match m = re.Match(subject);
             if (m.Success)
             {
@@ -132,7 +131,7 @@ namespace email_proc
 
         String MatchEmail(String re_str, String addr)
         {
-            Regex re = new Regex("<" + re_str + ">");
+            Regex re = new Regex(re_str);
             Match m = re.Match(addr);
             if (m.Success)
                 return m.Groups[1].Value.ToLowerInvariant();

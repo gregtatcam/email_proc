@@ -285,7 +285,7 @@ namespace email_proc
             GetHeaders(delegate (String name, String value)
             {
                 if (headersToGet == null || headersToGet.ContainsKey(name))
-                    headers[name] = value;
+                    headers[name] = value.Trim();
                 else if (headersToGet != null && headersToGet.Count == headers.Count) // must have got all requested
                     return true;
                 return false;
