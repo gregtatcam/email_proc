@@ -407,9 +407,10 @@ namespace email_proc
                             email = new Email(entity);
                             Add(email);
                         } while ((res = await email.Parse(reader, type, subtype, boundary)) == ParseResult.Ok);
-                        // if the last part is a multipart itself then it doesn't consume the close boundary
+                        // if the last part is a multipart or message? itself then it doesn't consume the close boundary
                         // or more parts, continue parsing until all parts and close boundary are consumed
-                        if (data.Last<Email>().content.dataType == DataType.Multipart)
+                        if (data.Last<Email>().content.dataType == DataType.Multipart ||
+                                data.Last<Email>().content.dataType == DataType.Message)
                             continue;
                         SetSize();
                         return res;
