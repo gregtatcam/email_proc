@@ -133,8 +133,7 @@ namespace email_proc
 
         bool GmailSpecial(String name)
         {
-            return name == "\"[Gmail]/Sent Mail\"" || name == "\"[Gmail]/Trash\"" ||
-                            name == "\"[Gmail]/Important\"" || name == "\"[Gmail]/All Mail\""; 
+            return (name == "\"[Gmail]/Important\"" || name == "\"[Gmail]/All Mail\"");
         }
         async Task<List<Mailbox>> GetMailboxesList(ImapCmd cmd, StatusCb status, ProgressCb progress)
         {
@@ -209,6 +208,7 @@ namespace email_proc
                     cmd = new ImapCmd(token, reader, connect.stream, true);
                     status("Compression enabled");
                 }
+          
                 // get the list of mailboxes
                 status("Fetching mailbox list...");
                 mailboxes = await GetMailboxesList(cmd,status,progress);
@@ -247,7 +247,9 @@ namespace email_proc
                                     progress((100.0 * (processed + int.Parse(msgn))) / messagesInAccount);
                                     await data(mailbox.name, message, msgid, msgn);
                                 }, mailbox.start)) != ReturnCode.Ok)
-                                status(token.IsCancellationRequested ? "No messages downloaded" : "Download cancelled");
+                            {
+                                status(token.IsCancellationRequested ? "Download cancelled" : "No messages downloaded");
+                            }
                         }
                         else
                         {
@@ -270,12 +272,14 @@ namespace email_proc
                                 })) != ReturnCode.Ok)
                             {
                                 progress(0);
-                                status(token.IsCancellationRequested ? "No messages downloaded" : "Download cancelled");
+                                status(token.IsCancellationRequested ? "Download cancelled" : "No messages downloaded, failed to get the list of unique messages");
                             }
                             else
                             {
                                 progress(0);
                                 status("Downloading {0} out of {1}", unique.Count, mailbox.cnt);
+                                status("{0} - {1} messages: ", mailbox.name, unique.Count);
+                                int downloaded = 0;
                                 foreach (String n in unique)
                                 {
                                     int num = int.Parse(n);
@@ -284,12 +288,17 @@ namespace email_proc
                                         {
                                             progress((100.0 * (processed + int.Parse(msgn))) / messagesInAccount);
                                             await data(mailbox.name, message, getMsgId(message), msgn);
+                                            downloaded++;
                                         }, num, num)) != ReturnCode.Ok)
                                     {
-                                        break;
+                                        status("failed to download {0}", n);
+                                        continue;
                                     }
                                 }
-                                status(token.IsCancellationRequested ? "No messages downloaded" : "Download cancelled");
+                                if (token.IsCancellationRequested)
+                                    status("Download cancelled");
+                                if (unique.Count != downloaded)
+                                    status("{0} out of {1} failed to download", unique.Count-downloaded, unique.Count);
                             }
                         }
                     }

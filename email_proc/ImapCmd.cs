@@ -336,7 +336,7 @@ namespace email_proc
 
         async Task Write(String str)
         {
-            byte[] buffer = Encoding.ASCII.GetBytes(str);
+            byte[] buffer = Encoding.Default.GetBytes(str);
             if (compress)
             {
                 MemoryStream mems = new MemoryStream();

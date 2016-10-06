@@ -33,23 +33,28 @@ namespace email_proc
         Dictionary<String, String> messageid { get; set; }
         CancellationToken token { get; set; }
 
+        void GetUniqueMailbox(String m)
+        {
+            GetUnique(mailboxes, m.Trim('\"').ToLowerInvariant());
+        }
+
         void InitMailboxes()
         {
-            GetUnique(mailboxes, "inbox");
-            GetUnique(mailboxes, "sent");
-            GetUnique(mailboxes, "sent messages");
-            GetUnique(mailboxes, "\"[Gmail]/Sent Mail\"");
-            GetUnique(mailboxes, "trash");
-            GetUnique(mailboxes, "\"[Gmail]/Trash\"");
-            GetUnique(mailboxes, "junk");
-            GetUnique(mailboxes, "deleted");
-            GetUnique(mailboxes, "deleted messages");
-            GetUnique(mailboxes, "spam");
-            GetUnique(mailboxes, "\"[Gmail]/Spam\"");
-            GetUnique(mailboxes, "\"[Gmail]/All Mail\"");
-            GetUnique(mailboxes, "\"[Gmail]/Important\"");
-            GetUnique(mailboxes, "drafts");
-            GetUnique(mailboxes, "\"[Gmail]/Drafts\"");
+            GetUniqueMailbox("inbox");
+            GetUniqueMailbox("sent");
+            GetUniqueMailbox("sent messages");
+            GetUniqueMailbox("\"[Gmail]/Sent Mail\"");
+            GetUniqueMailbox("trash");
+            GetUniqueMailbox("\"[Gmail]/Trash\"");
+            GetUniqueMailbox("junk");
+            GetUniqueMailbox("deleted");
+            GetUniqueMailbox("deleted messages");
+            GetUniqueMailbox( "spam");
+            GetUniqueMailbox( "\"[Gmail]/Spam\"");
+            GetUniqueMailbox( "\"[Gmail]/All Mail\"");
+            GetUniqueMailbox("\"[Gmail]/Important\"");
+            GetUniqueMailbox( "drafts");
+            GetUniqueMailbox( "\"[Gmail]/Drafts\"");
         }
         public EmailStats(CancellationToken token)
         {
@@ -117,15 +122,36 @@ namespace email_proc
 
         String GetMailbox(String mailbox)
         {
+            if (mailbox == "")
+                return GetUnique(mailboxes, "inbox");
             mailbox = mailbox.ToLower().Trim('\"');
-            string[] parts = Regex.Split(mailbox, "/");
+            string[] labels = Regex.Split(mailbox, ",");
             StringBuilder sb = new StringBuilder();
-            foreach (string part in parts)
+            foreach (string label in labels)
             {
-                if (sb.Length == 0)
-                    sb.Append(GetUnique(mailboxes, part));
+                if (Regex.IsMatch(label, "[[]Gmail[]]", RegexOptions.IgnoreCase))
+                {
+                    if (sb.Length == 0)
+                        sb.Append(GetUnique(mailboxes, label));
+                    else
+                        sb.AppendFormat(",{0}", GetUnique(mailboxes, label));
+                }
                 else
-                    sb.AppendFormat("/{0}", GetUnique(mailboxes, part));
+                {
+                    string[] parts = Regex.Split(mailbox, "/");
+                    StringBuilder sb1 = new StringBuilder();
+                    foreach (string part in parts)
+                    {
+                        if (sb1.Length == 0)
+                            sb1.Append(GetUnique(mailboxes, part));
+                        else
+                            sb1.AppendFormat("/{0}", GetUnique(mailboxes, part));
+                    }
+                    if (sb.Length == 0)
+                        sb.Append(sb1);
+                    else
+                        sb.AppendFormat(",{0}", sb1);
+                }
             }
             return sb.ToString();
         }
@@ -144,12 +170,14 @@ namespace email_proc
         {
             String[] addrs = Regex.Split(str, "[,;]");
             StringBuilder sb = new StringBuilder();
+            int c = 0;
             foreach(String addr in addrs)
             {
-                if (sb.ToString() != "")
+                if (c > 0)
                     sb.AppendFormat(",{0}", Sha1(EmailAddr(addr)));
                 else
                     sb.Append(Sha1(EmailAddr(addr)));
+                c++;
             }
             return sb.ToString();
         }
@@ -199,7 +227,7 @@ namespace email_proc
         {
             if (buff == "")
                 return "";
-            return Sha1(Encoding.ASCII.GetBytes(buff));
+            return Sha1(Encoding.Default.GetBytes(buff));
         }
 
         async Task TraverseEmail(StreamWriter filew, int id, int part, Email email)
@@ -279,7 +307,9 @@ namespace email_proc
                         String msgid = headers["message-id"];
                         // get unique messages
                         if (msgid != null && msgid != "" && MessageidUnique(msgid) == false)
+                        {
                             return;
+                        }
                         await WriteStatsLine(filew, "--> start");
                         int csize = await CompressedSize(message.GetBytes());
                         await WriteStatsLine(filew, "Full Message: {0} {1}", message.size, csize);
@@ -300,7 +330,7 @@ namespace email_proc
                     }
                     catch (Exception ex)
                     {
-                        await WriteStatsLine(filew, "<-- end failed to process: {0}", ex.Message);
+                        await WriteStatsLine(filew, "<-- end failed to process: {0}, {1}", ex.Message, ex.StackTrace);
                     }
                 });
                 status(false, "", "Statistics is generated in file {0}", file);

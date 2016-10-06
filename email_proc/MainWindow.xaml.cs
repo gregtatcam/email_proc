@@ -136,20 +136,22 @@ namespace email_proc
                 {
                     Status(true, "", "{0} {1}", m.Groups[1].Value, msgnum);
                 }
-                String postmark = EmailParser.MakePostmark(message);
+                try
+                {
+                    String postmark = EmailParser.MakePostmark(message);
 
-                await filew.WriteAsync(postmark);
-                await filew.WriteAsync("\r\n");
+                    await filew.WriteAsync(postmark);
+                    await filew.WriteAsync("\r\n");
+                } catch (AlreadyExistsException) { }
                 await filew.WriteAsync("X-Gmail-Labels: " + mailbox);
                 await filew.WriteAsync("\r\n");
                 await indexw.WriteLineAsync(mailbox + (msgid != "" ? " " + msgid : ""));
             }
-            catch (AlreadyExistsException)
-            {
-            }
             finally
             {
                 await filew.WriteAsync(message);
+                if (message.Length > 0 && message[message.Length - 1] != '\n')
+                    await filew.WriteAsync("\r\n");
             }
         }
 
@@ -377,6 +379,7 @@ namespace email_proc
                     filew.Close();
                 if (indexw != null)
                     indexw.Close();
+                
             }
         }
 
@@ -443,7 +446,20 @@ namespace email_proc
                 cbResume.Visibility = Visibility.Visible;
                 txtDownload.Text = "";
             }
-            lastDebug = e.Key;
+            else if (e.Key == Key.S && (DateTime.Now - now).Seconds < 2 && lastDebug == Key.LeftCtrl)
+            {
+                FolderBrowserDialog dlg = new FolderBrowserDialog();
+                if (dlg.ShowDialog() == System.Windows.Forms.DialogResult.OK)
+                {
+                    StreamWriter w = new StreamWriter(dlg.SelectedPath + "\\status");
+                    for (int i = 1; i < lbStatus.Items.Count; i++)
+                    {
+                        w.WriteLine(lbStatus.Items[i]);
+                    }
+                    w.Close();
+                }
+            }
+                lastDebug = e.Key;
             now = DateTime.Now;
         }
 

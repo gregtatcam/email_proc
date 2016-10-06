@@ -27,8 +27,8 @@ namespace email_proc
 {
     public enum DataType { Data, Message, Multipart }
     public enum ContentType { Audio, Video, Image, Application, Text, Multipart, Message, Other }
-    public enum ContentSubtype { Plain, Rfc822, Digest, Alternative, Parallel, Mixed, Other }
-    public enum ParseResult { Ok, OkMultipart, Eof, Failed }
+    public enum ContentSubtype { Plain, Rfc822, Digest, Alternative, Parallel, Mixed, Html, Other }
+    public enum ParseResult { Ok, OkMultipart, Eof, Failed, Postmark }
 
     // so far used to cache the postmark if the reader consumed too much data
     public class MessageReader : StreamReader
@@ -75,17 +75,19 @@ namespace email_proc
 
     public class Boundary
     {
-        static Regex re_boundary = new Regex("boundary=((\"[^\"]+\")|([^ ]+))", RegexOptions.IgnoreCase);
-        String boundary { get; set; }
+        static List<Boundary> boundaries = new List<Boundary>();
+        static Regex re_boundary = new Regex("boundary=((\"[^\r\n\"]+\")|([^\r\n ]+)[^;]+)", RegexOptions.IgnoreCase);
+        public String boundary { get; private set; }
         public String openBoundary { get; private set; }
         public String closeBoundary { get; private set; }
-        public Boundary(String delimeter=null)
+        public Boundary(String delimeter = null)
         {
             if (delimeter != null)
             {
                 delimeter = delimeter.Trim('\"').TrimEnd(' ');
                 openBoundary = "--" + delimeter;
                 closeBoundary = openBoundary + "--";
+                boundary = delimeter;
             }
             else
                 boundary = null;
@@ -94,13 +96,23 @@ namespace email_proc
         {
             return line.TrimEnd(' ') == openBoundary;
         }
-        public bool IsClose(String line)
+        public bool IsClose(String line, MessageReader reader)
         {
-            return line.TrimEnd(' ') == closeBoundary;
-        }
-        public bool IsEmpty()
-        {
-            return boundary == null;
+            line = line.TrimEnd(' ');
+            if (line == closeBoundary)
+            {
+                RemoveBoundary(this);
+                return true;
+            }
+            // any open or close boundary down in the stack closes all boundaries above in the stack
+            Boundary b = boundaries.FindLast(by => (by.closeBoundary == line || by.openBoundary == line));
+            if (b != null)
+            {
+                RemoveBoundary(b);
+                reader.PushCacheLine(line);
+                return true;
+            }
+            return false;
         }
         public static Boundary Parse(String line)
         {
@@ -109,15 +121,36 @@ namespace email_proc
                 return new Boundary(m.Groups[1].Value);
             return null;
         }
+        public bool NotClosed()
+        {
+            return boundaries.Exists(b => b.boundary == boundary);
+        }
+        void RemoveBoundary(Boundary boundary)
+        {
+            // close boundary removes all boundaries up in the stack, handles missing close boundary
+            int i = boundaries.FindLastIndex(b => b.boundary == boundary.boundary);
+            if (i >= 0)
+                boundaries.RemoveRange(i, boundaries.Count - i);
+        }
+        public static void Add(Boundary boundary)
+        {
+            boundaries.Add(boundary);
+        }
     }
 
     public abstract class Entity
     {
+        static List<Boundary> boundaries = null;
         static String crlf = "\n";
         protected MemoryStream entity { get; set; }
         protected long position { get; set; }
         public int size { get; protected set; }
         public int lines { get; protected set; }
+        protected object thisLock = new object();
+        protected List<Boundary> Boundaries { get { return boundaries; } }
+        protected String Error { get; set; }
+        protected ParseResult Status { get; set; }
+        public static void ResetBoundaries() { boundaries = new List<Boundary>(); }
         // assume the entity starts at the current position of the stream
         public Entity(MemoryStream entity)
         {
@@ -126,13 +159,22 @@ namespace email_proc
             position = entity.Position;
             size = 0;
             this.entity = entity;
+            Status = ParseResult.Ok;
+            Error = "";
+        }
+
+        protected ParseResult ParseStatus(ParseResult res, String error)
+        {
+            Status = res;
+            Error = error;
+            return Status;
         }
 
         private void Write(String buffer)
         {
-            using (Lock())
+            lock (thisLock)
             {
-                entity.WriteAsync(Encoding.ASCII.GetBytes(buffer), 0, buffer.Length);
+                entity.WriteAsync(Encoding.Default.GetBytes(buffer), 0, buffer.Length);
             }
         }
 
@@ -149,23 +191,15 @@ namespace email_proc
             Write(crlf);
             lines++;
         }
-        protected Mutex Lock()
-        {
-            StringBuilder sb = new StringBuilder();
-            sb.Append(entity.GetHashCode());
-            bool created = false;
-            Mutex nmutex = new Mutex(true, sb.ToString(), out created);
-            if (created == false)
-                nmutex.WaitOne();
-            return nmutex;
-        } 
         public String GetString()
         {
-            return Encoding.ASCII.GetString(GetBytes());
+            return Encoding.Default.GetString(GetBytes());
         }
-        public byte[] GetBytes ()
+        public byte[] GetBytes()
         {
-            using (Lock())
+            if (Status == ParseResult.Failed)
+                throw new ParsingFailedException(Error);
+            lock (thisLock)
             {
                 entity.Position = position;
                 byte[] buffer = new byte[size];
@@ -176,22 +210,22 @@ namespace email_proc
         }
         public void SetSize()
         {
-            using (Lock())
+            lock (thisLock)
             {
                 size = (int)(entity.Position - position);
             }
         }
         public void RewindLastCrlfSize()
         {
-            using (Lock())
+            lock (thisLock)
             {
                 entity.Seek(-2, SeekOrigin.Current);
                 byte[] buff = new byte[2];
                 entity.Read(buff, 0, 2);
-                char[] crlf = Encoding.ASCII.GetChars(buff);
-                if (crlf[0] == '\r')
+                char[] crlf = Encoding.Default.GetChars(buff);
+                if (size > 1 && crlf[0] == '\r' && crlf[1] == '\n')
                     size--;
-                if (crlf[1] == '\n')
+                if (size > 0 && crlf[1] == '\n')
                     size--;
             }
         }
@@ -223,23 +257,25 @@ namespace email_proc
         public String contentTypeFullStr { get; private set; }
         public Boundary boundary { get; private set; }
         static Dictionary<string, ContentType> types = new Dictionary<string, ContentType>()
-            { { "audo", ContentType.Audio }, {"video", ContentType.Video}, {"image",ContentType.Image }, {"application",ContentType.Application },
+            { { "audio", ContentType.Audio }, {"video", ContentType.Video}, {"image",ContentType.Image }, {"application",ContentType.Application },
             {"multipart",ContentType.Multipart }, {"message",ContentType.Message } };
         static Dictionary<string, ContentSubtype> subtypes = new Dictionary<string, ContentSubtype>()
             { { "plain", ContentSubtype.Plain }, {"rfc822",ContentSubtype.Rfc822 }, {"digest",ContentSubtype.Digest },
-              { "alternative", ContentSubtype.Alternative }, { "parallel", ContentSubtype.Parallel }, { "mixed", ContentSubtype.Mixed} };
+              { "alternative", ContentSubtype.Alternative }, { "parallel", ContentSubtype.Parallel }, { "mixed", ContentSubtype.Mixed},
+              { "html", ContentSubtype.Html } };
         static Regex re_content = new Regex("^content-type: ([^/ ]+)/([^; ]+)(.*)$", RegexOptions.IgnoreCase);
         public Headers(MemoryStream entity, ContentType outerType = ContentType.Text, ContentSubtype outerSubtype = ContentSubtype.Plain):base(entity)
         {
-            contentTypeFullStr = "";
             if (outerType == ContentType.Multipart && outerSubtype == ContentSubtype.Digest)
             {
                 contentType = ContentType.Message;
                 contentSubtype = ContentSubtype.Rfc822;
+                contentTypeFullStr = "message/rfc822";
             } else
             {
                 contentType = ContentType.Text;
                 contentSubtype = ContentSubtype.Plain;
+                contentTypeFullStr = "text/plain";
             }
             boundary = null;
         }
@@ -314,10 +350,21 @@ namespace email_proc
             // could there be an empty line in FWS? I think just crlf is not allowed in FWS
             // if starts with the blank line then there is no header
             // ends with blank line
-            while ((line = await reader.ReadLineAsync()) != null && line != "")
+            // there are empty lines before the headers start. how many?
+            bool first = true;
+            while ((line = await reader.ReadLineAsync()) != null && (first || !first && line != ""))
             {
-                WriteWithCrlf(line);
-                if (foundContentType && boundaryRequired && boundary == null)
+                first = false;
+                if (line != "")
+                    WriteWithCrlf(line);
+                else
+                    continue;
+                // hack, could there be a header line not matching 
+                if (!Regex.IsMatch(line, "^([^ :]+[ ]*:)|([ \t]+)"))
+                {
+                    return ParseStatus(ParseResult.Failed, "invalid headers");
+                }
+                else if (foundContentType && boundaryRequired && boundary == null)
                 {
                     boundary = Boundary.Parse(line);
                 }
@@ -330,11 +377,15 @@ namespace email_proc
                         ContentSubtype subtype = ContentSubtype.Plain;
                         String tp = m.Groups[1].Value.ToLower();
                         String sbtp = m.Groups[2].Value.ToLower();
-                        contentTypeFullStr = tp + "/" + sbtp;
                         if (types.TryGetValue(tp, out type) == true)
                             contentType = type;
+                        else
+                            contentType = ContentType.Other;
                         if (subtypes.TryGetValue(sbtp, out subtype) == true)
                             contentSubtype = subtype;
+                        else
+                            contentSubtype = ContentSubtype.Other;
+                        contentTypeFullStr = (tp==""?"text":tp) + "/" + (sbtp==""?"plain":sbtp);
                         foundContentType = true;
                         if (contentType == ContentType.Multipart)
                         {
@@ -344,8 +395,13 @@ namespace email_proc
                     }
                 }
             }
-            if (boundaryRequired && boundary == null)
-                throw new ParsingFailedException("multipart media part with no boundary");
+            if (boundaryRequired)
+            {
+                if (boundary == null)
+                    return ParseStatus(ParseResult.Failed, "multipart media part with no boundary");
+                else
+                    Boundary.Add(boundary);
+            }
             SetSize();
             WriteCrlf(); // delimeter between headers and body, not part of the headers, so not included in size
             if (line == null)
@@ -389,7 +445,7 @@ namespace email_proc
                         // consumed too much, probably missing boundary?
                         reader.PushCacheLine(line);
                         SetSize();
-                        return ParseResult.Eof;
+                        return ParseResult.Postmark;
                     }
                     WriteWithCrlf(line);
                     // find open boundary
@@ -406,19 +462,21 @@ namespace email_proc
                             // exception is the last part which is also multipart
                             email = new Email(entity);
                             Add(email);
-                        } while ((res = await email.Parse(reader, type, subtype, boundary)) == ParseResult.Ok);
+                        } while ((res = await email.Parse(reader, type, subtype, boundary)) == ParseResult.OkMultipart); // Ok
                         // if the last part is a multipart or message? itself then it doesn't consume the close boundary
                         // or more parts, continue parsing until all parts and close boundary are consumed
-                        if (data.Last<Email>().content.dataType == DataType.Multipart ||
-                                data.Last<Email>().content.dataType == DataType.Message)
+                        /*if (Ok(res) && (data.Last<Email>().content.dataType == DataType.Multipart ||
+                                data.Last<Email>().content.dataType == DataType.Message))*/
+                        if (res == ParseResult.Ok && boundary.NotClosed())
                             continue;
-                        SetSize();
+                        if (res != ParseResult.Failed)
+                            SetSize();
                         return res;
                     }
-                    else if (boundary.IsClose(line))
+                    else if (boundary.IsClose(line, reader))
                     {
                         SetSize();
-                        return ParseResult.OkMultipart;
+                        return ParseResult.Ok; // OkMultipart
                     }
                 }
             }
@@ -428,7 +486,8 @@ namespace email_proc
                 Email email = new Email(entity);
                 Add(email);
                 ParseResult res = await email.Parse(reader, type, subtype, boundary);
-                SetSize();
+                if (res != ParseResult.Failed)
+                    SetSize();
                 return res;
             }
             else
@@ -447,21 +506,21 @@ namespace email_proc
                         // consumed too much, probably closing boundary is missing ?
                         reader.PushCacheLine(line);
                         SetSize();
-                        return ParseResult.Ok;
+                        return ParseResult.Postmark;
                     }
                     else if (boundary != null && boundary.IsOpen(line))
                     {
                         SetSize();
                         RewindLastCrlfSize();
                         WriteWithCrlf(line);
-                        return ParseResult.Ok;
+                        return ParseResult.OkMultipart; //Ok
                     }
-                    else if (boundary != null && boundary.IsClose(line))
+                    else if (boundary != null && boundary.IsClose(line, reader))
                     {
                         SetSize();
                         RewindLastCrlfSize();
                         WriteWithCrlf(line);
-                        return ParseResult.OkMultipart;
+                        return ParseResult.Ok; //OkMultipart
                     }
                     else
                         WriteWithCrlf(line);
@@ -482,12 +541,10 @@ namespace email_proc
         {
             headers = new Headers(entity, type, subtype);
             if ((await headers.Parse(reader)) == ParseResult.Failed)
-                throw new ParsingFailedException("email doesn't contain headers");
+                return ParseResult.Failed;
             content = new Content(entity);
             ParseResult result = await content.Parse(reader, headers.contentType, headers.contentSubtype,
                 (headers.boundary != null) ? headers.boundary : boundary);
-            if (result == ParseResult.Failed)
-                throw new ParsingFailedException("failed to parse email body");
             return result;
         }
     }
@@ -522,6 +579,7 @@ namespace email_proc
 
         public Message() : base(null)
         {
+            Entity.ResetBoundaries();
         }
 
         /* Assume (for now) the message starts with the postmark,
@@ -538,9 +596,7 @@ namespace email_proc
                 throw new ParsingFailedException("postmark is not found");
             email = new Email(entity);
             ParseResult res = await email.Parse(reader);
-            if (res == ParseResult.Failed)
-                throw new ParsingFailedException("email doesn't conform to rfc822");
-            if (res != ParseResult.Eof)
+            if (res != ParseResult.Eof && res != ParseResult.Postmark)
                 await ConsumeToEnd(reader);
             SetSize();
 
@@ -553,7 +609,7 @@ namespace email_proc
         public delegate void TraverseCb(Email email);
         public delegate Task MessageCb(Message message, Exception ex=null);
         // From 1487928187900928398@xxx Fri Dec 19 02:21:37 2014
-        public static String PostmarkReStr = "^(from [^ \r\n]+ (mon|tue|wed|thu|fri|sat|sun) (jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec))[^\r\n]+";
+        public static String PostmarkReStr = "^(from [^ \r\n]+ (mon|tue|wed|thu|fri|sat|sun) (jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)) [0-9]+";
         // From: John Smith <john.smith@provider.com>
         public static String FromReStr = "^from: ((\"[^\"\r\n]+\"[\r\n]*)|(([^:\"@<]+[\r\n]*){0,}))[ ]*<?([^\"<: \r\n@]+@[^\": \r\n>]+)>?([\r\n]*)";
         // Date: Fri, 19 Dec 2014 09:21:23 -0500
@@ -606,8 +662,8 @@ namespace email_proc
                 try
                 {
                     Message message = new Message();
-                    if (await message.Parse(reader) != ParseResult.Failed)
-                        await cb(message);
+                    await message.Parse(reader);
+                    await cb(message);
                 }
                 catch (Exception ex)
                 {
